@@ -13,6 +13,14 @@ from typing import List, Optional
 from groq import Groq
 import re
 import asyncio
+from sentence_transformers import SentenceTransformer
+import numpy as np
+from sklearn.metrics.pairwise import cosine_similarity
+
+
+print("📥 Loading Embedding Model for RAG...")
+embedder = SentenceTransformer('all-MiniLM-L6-v2')
+
 
 # ==========================================
 # 1. Configuration & Global State
@@ -74,8 +82,133 @@ class SummaryRequest(BaseModel):
 # ==========================================
 # 4. Core Helper Functions
 # ==========================================
+def extract_text_from_source(db_path_value: str) -> str:
+    """Dynamically finds and reads the PDF based on the nested year-based folder structure."""
+    if not db_path_value or pd.isna(db_path_value):
+        return ""
+        
+    file_id = str(db_path_value).strip()
+    
+    # 1. Extract the year from the file ID (e.g., '2024' from '2024_1_1_10')
+    year_match = re.match(r'^(\d{4})', file_id)
+    if not year_match:
+        print(f"⚠️ Could not determine year from file ID: {file_id}")
+        return ""
+        
+    year = year_match.group(1)
+    
+    # 2. Build the expected folder paths (handling both 'judgement' and 'judgment' spellings)
+    possible_base_folders = [f"judgement_{year}", f"judgment_{year}"]
+    sub_folder = f"extracted_{year}_case"
+    
+    file_path = None
+    
+    # Check the exact locations first (This is lightning fast ⚡)
+    for base in possible_base_folders:
+        candidate_path = Path(base) / sub_folder / f"{file_id}.pdf"
+        if candidate_path.exists():
+            file_path = candidate_path
+            break
+            
+    # 3. Fallback: If the exact folder isn't found, do a quick global search
+    if not file_path:
+        print(f"⚠️ Strict path not found for {file_id}. Searching globally...")
+        found_files = list(Path('.').rglob(f"{file_id}.pdf"))
+        if found_files:
+            # Drop it if it's in a virtual environment folder
+            valid_files = [f for f in found_files if 'venv' not in f.parts]
+            if valid_files:
+                file_path = valid_files[0]
+            
+    if not file_path or not file_path.exists():
+        print(f"❌ File completely missing from disk: {file_id}.pdf")
+        return ""
 
+    print(f"📖 Successfully located and reading PDF: {file_path}")
+    
+    # 4. Read the PDF
+    try:
+        reader = PyPDF2.PdfReader(str(file_path))
+        return "".join([page.extract_text() + "\n" for page in reader.pages if page.extract_text()])
+    except Exception as e:
+        print(f"⚠️ Error reading PDF {file_path}: {e}")
+        return ""
+def verify_quotation(attributed_claim: str, source_file_path: str):
+    """The RAG Engine: Finds the context in the judgment and uses LLM to verify the claim."""
+    if not attributed_claim:
+        return {"status": "⚠️ SKIPPED", "reason": "No specific claim was extracted to verify."}
 
+    print(f"📖 Reading source file for RAG: {source_file_path}")
+    source_text = extract_text_from_source(source_file_path)
+    
+    if not source_text.strip():
+        return {"status": "⚠️ ERROR", "reason": "Could not extract text from the source judgment."}
+
+    # 1. Chunking: Try to split by paragraph first
+    paragraphs = [p.strip() for p in source_text.split('\n\n') if len(p.strip()) > 100]
+
+    # Fallback: If the PDF was poorly formatted and didn't have double newlines, chunk manually
+    if len(paragraphs) < 5:
+        paragraphs = chunk_text(source_text, chunk_size=1200, overlap=200)
+
+    if not paragraphs:
+        return {"status": "⚠️ ERROR", "reason": "No valid text chunks found in source."}
+
+    # 2. Embedding generation
+    print(f"🧠 Embedding {len(paragraphs)} chunks to find the quote...")
+    claim_embedding = embedder.encode([attributed_claim])
+    para_embeddings = embedder.encode(paragraphs)
+
+    # 3. Semantic Search via Cosine Similarity
+    similarities = cosine_similarity(claim_embedding, para_embeddings)[0]
+    best_match_idx = np.argmax(similarities)
+    best_paragraph = paragraphs[best_match_idx]
+    max_score = similarities[best_match_idx]
+
+    # If the score is incredibly low, the lawyer entirely hallucinated the quote
+    if max_score < 0.25:
+         return {
+             "status": "🔴 FABRICATED QUOTE", 
+             "reason": f"No matching concepts found in the judgment. (Max similarity: {max_score:.2f})",
+             "closest_text_found": best_paragraph[:200] + "..."
+         }
+
+    # 4. LLM Natural Language Inference (NLI)
+    # The embeddings found the right neighborhood; now Groq determines if it actually matches.
+    verification_prompt = f"""
+    You are a strict legal auditor. 
+    A lawyer claims this case states: "{attributed_claim}"
+    
+    The most relevant paragraph found in the actual case file is:
+    "{best_paragraph}"
+    
+    Does the actual paragraph SUPPORT, CONTRADICT, or is it UNSUPPORTED/UNRELATED to the claim?
+    Respond ONLY in JSON format:
+    {{"verdict": "SUPPORTED" | "CONTRADICTED" | "UNSUPPORTED", "explanation": "Brief reasoning"}}
+    """
+
+    try:
+        response = client.chat.completions.create(
+            model="llama-3.3-70b-versatile",
+            messages=[{"role": "user", "content": verification_prompt}],
+            response_format={"type": "json_object"},
+            temperature=0.0
+        )
+        result = json.loads(response.choices[0].message.content)
+        
+        status_map = {
+            "SUPPORTED": "🟢 QUOTE VERIFIED",
+            "CONTRADICTED": "🔴 QUOTE CONTRADICTED",
+            "UNSUPPORTED": "🟠 QUOTE UNSUPPORTED"
+        }
+        
+        return {
+            "status": status_map.get(result.get("verdict"), "⚠️ UNKNOWN"),
+            "reason": result.get("explanation"),
+            "found_paragraph": best_paragraph
+        }
+    except Exception as e:
+         return {"status": "⚠️ ERROR", "reason": f"LLM Error: {str(e)}"}
 
 async def extract_from_chunk_async(chunk: str):
     prompt = f"""
@@ -174,18 +307,77 @@ def get_broad_candidates(case_name, max_results=15):
     if df.empty:
         return pd.DataFrame()
 
-    cleaned = re.sub(r'[^a-zA-Z\s]', '', case_name)
-    words = cleaned.split()
-    stop_words = ['the', 'state', 'union', 'of', 'india', 'vs', 'v', 'versus', 'ors', 'and', 'others', 'anr']
-    meaningful_words = [w for w in words if w.lower() not in stop_words]
-    search_word = meaningful_words[0] if meaningful_words else (words[0] if words else "")
+    query = str(case_name).strip()
+    candidates = pd.DataFrame()
 
-    if not search_word:
-        return pd.DataFrame()
+    # --- STRATEGY 1: NUMERIC MATCHING (Appeal Nos, Citations, Diary Nos) ---
+    # Extract all numbers from the citation (e.g., '3030' and '2022' from "Civil Appeal 3030/2022")
+    nums = re.findall(r'\d+', query)
+    
+    if len(nums) >= 2:
+        # If there are at least 2 numbers, use AND logic (must contain both numbers somewhere)
+        mask = pd.Series(True, index=df.index)
+        for num in nums[:3]:  # Limit to top 3 numbers to avoid over-filtering
+            col_mask = (
+                df['title'].astype(str).str.contains(num, na=False) |
+                df['description'].astype(str).str.contains(num, na=False) |
+                df['case_id'].astype(str).str.contains(num, na=False) |
+                df['nc_display'].astype(str).str.contains(num, na=False) |
+                df['citation'].astype(str).str.contains(num, na=False)
+            )
+            mask = mask & col_mask
+        
+        num_matches = df[mask]
+        if not num_matches.empty:
+            candidates = pd.concat([candidates, num_matches])
 
-    matches = df[df['title'].str.contains(search_word, case=False, na=False)]
-    return matches.head(max_results)
+    # --- STRATEGY 2: PARTY NAME MATCHING (Text Search) ---
+    # Remove numbers and special characters to isolate names
+    cleaned_text = re.sub(r'[^a-zA-Z\s]', ' ', query)
+    words = cleaned_text.split()
+    
+    # Expanded stop words list specific to legal citations
+    stop_words = {'the', 'state', 'union', 'of', 'india', 'vs', 'v', 'versus', 'ors', 'and', 'others', 'anr', 
+                  'supra', 'ltd', 'limited', 'civil', 'appeal', 'special', 'leave', 'petition', 'diary', 'no', 'honble'}
+    
+    # Get meaningful words and SORT THEM BY LENGTH
+    # Why? Longest words are usually unique names (e.g., "Pushpam" instead of "Mary"), which beats spelling errors.
+    meaningful_words = [w for w in words if len(w) > 2 and w.lower() not in stop_words]
+    meaningful_words.sort(key=len, reverse=True)
 
+    if meaningful_words:
+        mask = pd.Series(True, index=df.index)
+        # Require the top 2 longest words to both be present (AND logic)
+        for word in meaningful_words[:2]:
+            col_mask = (
+                df['title'].astype(str).str.contains(word, case=False, na=False) |
+                df['petitioner'].astype(str).str.contains(word, case=False, na=False) |
+                df['respondent'].astype(str).str.contains(word, case=False, na=False)
+            )
+            mask = mask & col_mask
+        
+        text_matches = df[mask]
+        if not text_matches.empty:
+            candidates = pd.concat([candidates, text_matches])
+            
+    # --- STRATEGY 3: FALLBACK (Single Keyword) ---
+    # If strict AND logic failed, fallback to searching just the single longest unique word
+    if candidates.empty and meaningful_words:
+        longest_word = meaningful_words[0]
+        mask = (
+            df['title'].astype(str).str.contains(longest_word, case=False, na=False) |
+            df['petitioner'].astype(str).str.contains(longest_word, case=False, na=False) |
+            df['respondent'].astype(str).str.contains(longest_word, case=False, na=False)
+        )
+        fallback_matches = df[mask]
+        candidates = pd.concat([candidates, fallback_matches])
+
+    # Drop duplicates and return the top N matches to the LLM
+    if not candidates.empty:
+        candidates = candidates.drop_duplicates(subset=['index'])
+        return candidates.head(max_results)
+
+    return pd.DataFrame()
 
 def resolve_match_with_llm(target_citation, candidates_df):
     if candidates_df.empty:
@@ -614,7 +806,6 @@ def get_db_stats():
         "columns": list(df.columns)
     }
 
-
 @app.post("/audit-document")
 async def audit_document(file: UploadFile = File(...)):
     """Upload a PDF, extract text, find citations, and verify them against the database."""
@@ -668,6 +859,20 @@ async def audit_document(file: UploadFile = File(...)):
             "court_type": "High Court",
             "verification": verification_result
         })
+    
+        # 🧠 4. QUOTE VERIFICATION (RAG)
+        quote_verification = {}
+        if "🟢" in verification_result.get("status", ""):
+             # Case exists! Now let's check the quote.
+             source_file_path = verification_result.get("file_to_open")
+             
+             # Check if we actually have a valid file path in the DB
+             if pd.isna(source_file_path) or not str(source_file_path).strip():
+                 quote_verification = {"status": "⚠️ SKIPPED", "reason": "No PDF path available in database for this case."}
+             else:
+                 quote_verification = verify_quotation(claim, str(source_file_path))
+        else:
+             quote_verification = {"status": "⚠️ SKIPPED", "reason": "Case was not verified, skipping quote check."}
 
     return JSONResponse({
         "filename": file.filename,
@@ -676,8 +881,8 @@ async def audit_document(file: UploadFile = File(...)):
         "high_court_count": len(hc_citations),
         "results": final_report
     })
-
-
+    
+    
 @app.post("/audit-multiple")
 async def audit_multiple(files: List[UploadFile] = File(...)):
     """Upload multiple PDFs and get a combined audit report."""

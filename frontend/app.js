@@ -1,6 +1,6 @@
 // ==========================================
-// ⚖️ LEGAL CITATION AUDITOR v2.0 — ENGINE
-// Features: Audit, Search, Bulk, History, Export, Chatbot, Summary
+// ⚖️ LEGAL CITATION AUDITOR v2.1 — ENGINE
+// Features: Audit, Search, Bulk, History, Export, Chatbot, Summary, RAG Quote Verification
 // ==========================================
 
 const API_BASE = '';
@@ -23,7 +23,7 @@ const orderOverlay     = document.getElementById('order-overlay');
 const orderBody        = document.getElementById('order-body');
 const orderClose       = document.getElementById('order-close');
 const benchClock       = document.getElementById('bench-clock');
-const sessionId        = document.getElementById('session-id');
+const sessionIdEl      = document.getElementById('session-id');
 const toastContainer   = document.getElementById('toast-container');
 
 // Stats
@@ -33,12 +33,19 @@ const vcOverruled  = document.getElementById('vc-overruled');
 const vcSkipped    = document.getElementById('vc-skipped');
 const vcUnheard    = document.getElementById('vc-unheard');
 
+// Quote verification stats
+const vcQuoteVerified     = document.getElementById('vc-quote-verified');
+const vcQuoteContradicted = document.getElementById('vc-quote-contradicted');
+const vcQuoteUnsupported  = document.getElementById('vc-quote-unsupported');
+const vcQuoteFabricated   = document.getElementById('vc-quote-fabricated');
+
 // Filter counts
 const jfAll        = document.getElementById('jf-all');
 const jfUpheld     = document.getElementById('jf-upheld');
 const jfFabricated = document.getElementById('jf-fabricated');
 const jfSkipped    = document.getElementById('jf-skipped');
 const jfUnverified = document.getElementById('jf-unverified');
+const jfQuoteIssues = document.getElementById('jf-quote-issues');
 
 // Court breakdown
 const cbScFill     = document.getElementById('cb-sc-fill');
@@ -55,11 +62,32 @@ let lastAuditResponse = null;
 // 1. OATH SCREEN (Boot)
 // ==========================================
 function runOathSequence() {
+    // Check backend health during boot
+    checkBackendHealth();
     setTimeout(() => {
         oathScreen.classList.add('dismissed');
         appEl.classList.remove('hidden');
         setTimeout(() => { oathScreen.style.display = 'none'; }, 1000);
-    }, 4000);
+    }, 4500);
+}
+
+async function checkBackendHealth() {
+    try {
+        const resp = await fetch(`${API_BASE}/db-stats`);
+        const data = await resp.json();
+        if (data.loaded) {
+            document.getElementById('registry-records').textContent = `${data.record_count.toLocaleString()} cases in registry`;
+        } else {
+            document.getElementById('ind-db').classList.remove('online');
+            document.getElementById('ind-db').classList.add('offline');
+        }
+    } catch (e) {
+        console.warn('Backend not reachable:', e);
+        ['ind-api', 'ind-llm', 'ind-db', 'ind-rag'].forEach(id => {
+            const el = document.getElementById(id);
+            if (el) { el.classList.remove('online'); el.classList.add('offline'); }
+        });
+    }
 }
 
 // ==========================================
@@ -74,7 +102,7 @@ function updateClock() {
 setInterval(updateClock, 1000);
 updateClock();
 
-sessionId.textContent = `SCI-${Date.now().toString(36).toUpperCase().slice(-6)}`;
+sessionIdEl.textContent = `SCI-${Date.now().toString(36).toUpperCase().slice(-6)}`;
 
 // ==========================================
 // 3. TAB NAVIGATION
@@ -160,10 +188,11 @@ async function commenceAudit() {
     gavelBtn.disabled = true;
     courtBreakdown.classList.add('hidden');
     document.getElementById('post-audit-actions').classList.add('hidden');
+    document.getElementById('quote-summary').classList.add('hidden');
 
-    ['ds-1','ds-2','ds-3','ds-4','ds-5'].forEach(id => {
+    ['ds-1','ds-2','ds-3','ds-4','ds-5','ds-6'].forEach(id => {
         const el = document.getElementById(id);
-        el.classList.remove('active', 'done');
+        if (el) { el.classList.remove('active', 'done'); }
     });
     document.getElementById('ds-1').classList.add('active');
     animateDeliberation();
@@ -202,31 +231,40 @@ async function commenceAudit() {
 }
 
 function animateDeliberation() {
-    const steps = ['ds-1', 'ds-2', 'ds-3', 'ds-4', 'ds-5'];
+    const steps = ['ds-1', 'ds-2', 'ds-3', 'ds-4', 'ds-5', 'ds-6'];
     const texts = [
         ['READING DOCUMENT', 'Extracting text from filed PDF...'],
-        ['IDENTIFYING AUTHORITIES', 'AI is finding all cited cases...'],
+        ['IDENTIFYING AUTHORITIES', 'AI is finding all cited cases and attributed claims...'],
         ['CLASSIFYING COURTS', 'Separating High Court and Supreme Court citations...'],
         ['SEARCHING COURT RECORDS', 'Cross-referencing SC cases against the archive...'],
+        ['RAG QUOTE VERIFICATION', 'Embedding quotes & searching source judgments...'],
         ['PRONOUNCING JUDGMENT', 'Running hallucination detection...']
     ];
     steps.forEach((id, i) => {
         setTimeout(() => {
+            const el = document.getElementById(id);
+            if (!el) return;
             if (i > 0) {
-                document.getElementById(steps[i - 1]).classList.remove('active');
-                document.getElementById(steps[i - 1]).classList.add('done');
+                const prevEl = document.getElementById(steps[i - 1]);
+                if (prevEl) {
+                    prevEl.classList.remove('active');
+                    prevEl.classList.add('done');
+                }
             }
-            document.getElementById(id).classList.add('active');
+            el.classList.add('active');
             document.getElementById('delib-title').textContent = texts[i][0];
             document.getElementById('delib-sub').textContent = texts[i][1];
-        }, i * 1800);
+        }, i * 1500);
     });
 }
 
 function finishDeliberation() {
-    ['ds-1','ds-2','ds-3','ds-4','ds-5'].forEach(id => {
-        document.getElementById(id).classList.remove('active');
-        document.getElementById(id).classList.add('done');
+    ['ds-1','ds-2','ds-3','ds-4','ds-5','ds-6'].forEach(id => {
+        const el = document.getElementById(id);
+        if (el) {
+            el.classList.remove('active');
+            el.classList.add('done');
+        }
     });
     document.getElementById('delib-title').textContent = 'JUDGMENT READY';
     document.getElementById('delib-sub').textContent = 'The bench has concluded its review.';
@@ -245,6 +283,9 @@ function renderJudgments(data) {
     const total   = data.total_citations_found || results.length;
 
     let upheld = 0, fabricated = 0, skipped = 0, unverified = 0;
+    let quoteVerified = 0, quoteContradicted = 0, quoteUnsupported = 0, quoteFabricated = 0;
+    let quoteIssueCount = 0;
+    
     judgmentRoll.innerHTML = '';
 
     results.forEach((item, i) => {
@@ -253,7 +294,17 @@ function renderJudgments(data) {
         else if (status === 'hallucinated') fabricated++;
         else if (status === 'skipped')  skipped++;
         else                            unverified++;
-        const card = buildJudgmentCard(item, i, status);
+        
+        // Count quote verification stats
+        const qv = item.quote_verification || {};
+        const qStatus = (qv.status || '').toLowerCase();
+        if (qStatus.includes('verified')) quoteVerified++;
+        else if (qStatus.includes('contradicted')) { quoteContradicted++; quoteIssueCount++; }
+        else if (qStatus.includes('unsupported')) { quoteUnsupported++; quoteIssueCount++; }
+        else if (qStatus.includes('fabricated')) { quoteFabricated++; quoteIssueCount++; }
+        
+        const hasQuoteIssue = qStatus.includes('contradicted') || qStatus.includes('unsupported') || qStatus.includes('fabricated');
+        const card = buildJudgmentCard(item, i, status, hasQuoteIssue);
         judgmentRoll.appendChild(card);
     });
 
@@ -263,11 +314,22 @@ function renderJudgments(data) {
     animateNum(vcSkipped, skipped);
     animateNum(vcUnheard, unverified);
 
+    // Quote verification summary
+    const quoteSummaryEl = document.getElementById('quote-summary');
+    if (quoteVerified + quoteContradicted + quoteUnsupported + quoteFabricated > 0) {
+        quoteSummaryEl.classList.remove('hidden');
+        animateNum(vcQuoteVerified, quoteVerified);
+        animateNum(vcQuoteContradicted, quoteContradicted);
+        animateNum(vcQuoteUnsupported, quoteUnsupported);
+        animateNum(vcQuoteFabricated, quoteFabricated);
+    }
+
     jfAll.textContent        = total;
     jfUpheld.textContent     = upheld;
     jfFabricated.textContent = fabricated;
     jfSkipped.textContent    = skipped;
     jfUnverified.textContent = unverified;
+    jfQuoteIssues.textContent = quoteIssueCount;
 
     courtBreakdown.classList.remove('hidden');
     cbScCount.textContent = scCount;
@@ -282,20 +344,38 @@ function renderJudgments(data) {
 function classifyStatus(item) {
     const raw = (item.verification?.status || '').toLowerCase();
     const courtType = (item.court_type || '').toLowerCase();
-    if (raw.includes('skipped') || raw.includes('⚠️')) return 'skipped';
-    if (courtType === 'high court' && !raw.includes('verified') && !raw.includes('hallucination')) return 'skipped';
+    if (raw.includes('skipped') || (raw.includes('⚠️') && !raw.includes('hc-'))) return 'skipped';
+    if (courtType === 'high court' && !raw.includes('verified') && !raw.includes('hallucination') && !raw.includes('hc-')) return 'skipped';
     if (raw.includes('verified') || raw.includes('🟢')) return 'verified';
     if (raw.includes('hallucination') || raw.includes('🔴')) return 'hallucinated';
+    if (raw.includes('hc-')) {
+        if (raw.includes('verified')) return 'verified';
+        if (raw.includes('hallucination')) return 'hallucinated';
+    }
     return 'no-match';
 }
 
-function buildJudgmentCard(item, index, status) {
+function classifyQuoteStatus(quoteVerification) {
+    if (!quoteVerification) return null;
+    const s = (quoteVerification.status || '').toLowerCase();
+    if (s.includes('verified')) return 'quote-ok';
+    if (s.includes('contradicted')) return 'quote-contradicted';
+    if (s.includes('unsupported')) return 'quote-unsupported';
+    if (s.includes('fabricated')) return 'quote-fabricated';
+    if (s.includes('skipped')) return 'quote-skipped';
+    if (s.includes('error')) return 'quote-error';
+    return null;
+}
+
+function buildJudgmentCard(item, index, status, hasQuoteIssue) {
     const card = document.createElement('div');
-    card.className = `j-card ${status}`;
+    card.className = `j-card ${status}${hasQuoteIssue ? ' quote-issue' : ''}`;
     card.style.animationDelay = `${index * 0.08}s`;
     card.dataset.status = status;
+    card.dataset.hasQuoteIssue = hasQuoteIssue ? 'true' : 'false';
 
     const v = item.verification || {};
+    const qv = item.quote_verification || {};
     const verdictLabels = {
         'verified': 'UPHELD', 'hallucinated': 'FABRICATED',
         'skipped': 'HIGH COURT', 'no-match': 'UNVERIFIED'
@@ -307,6 +387,8 @@ function buildJudgmentCard(item, index, status) {
     const courtIcon   = courtType.toLowerCase().includes('high')
         ? '<i class="fas fa-university"></i>'
         : '<i class="fas fa-landmark"></i>';
+    
+    const attributedClaim = item.attributed_claim || '';
 
     const confidenceBar = confidence !== null ? `
         <div class="confidence-bar-wrap">
@@ -318,10 +400,34 @@ function buildJudgmentCard(item, index, status) {
             <span class="confidence-pct">${confidence}%</span>
         </div>` : '';
 
+    // Quote verification badge
+    const qvStatus = classifyQuoteStatus(qv);
+    const qvBadgeMap = {
+        'quote-ok': '<span class="qv-badge qv-ok"><i class="fas fa-check-double"></i> Quote Verified</span>',
+        'quote-contradicted': '<span class="qv-badge qv-bad"><i class="fas fa-exclamation-triangle"></i> Quote Contradicted</span>',
+        'quote-unsupported': '<span class="qv-badge qv-warn"><i class="fas fa-question-circle"></i> Quote Unsupported</span>',
+        'quote-fabricated': '<span class="qv-badge qv-bad"><i class="fas fa-ghost"></i> Quote Fabricated</span>',
+        'quote-skipped': '<span class="qv-badge qv-skip"><i class="fas fa-forward"></i> Quote Check Skipped</span>',
+        'quote-error': '<span class="qv-badge qv-skip"><i class="fas fa-bug"></i> Quote Check Error</span>'
+    };
+    const qvBadge = qvBadgeMap[qvStatus] || '';
+
+    // Attributed claim preview
+    const claimPreview = attributedClaim 
+        ? `<div class="j-detail j-claim-preview">
+                <i class="fas fa-quote-left"></i>
+                <span class="j-label">CLAIM</span>
+                <span class="j-value">"${esc(truncate(attributedClaim, 80))}"</span>
+           </div>` 
+        : '';
+
     card.innerHTML = `
         <div class="j-card-top">
             <div class="j-case-name">${esc(item.target_citation)}</div>
-            <span class="j-verdict-badge">${verdictLabels[status]}</span>
+            <div class="j-badges">
+                <span class="j-verdict-badge">${verdictLabels[status]}</span>
+                ${qvBadge}
+            </div>
         </div>
         ${confidenceBar}
         <div class="j-card-details">
@@ -337,6 +443,7 @@ function buildJudgmentCard(item, index, status) {
                     <span class="j-value">${esc(matchedName)}</span>
                 </div>
             ` : ''}
+            ${claimPreview}
             <div class="j-detail">
                 <i class="fas fa-feather-alt"></i>
                 <span class="j-label">NOTE</span>
@@ -363,7 +470,13 @@ document.querySelectorAll('.jf-tab').forEach(tab => {
         tab.classList.add('active');
         const filter = tab.dataset.filter;
         document.querySelectorAll('.j-card').forEach(card => {
-            card.style.display = (filter === 'all' || card.dataset.status === filter) ? '' : 'none';
+            if (filter === 'all') {
+                card.style.display = '';
+            } else if (filter === 'quote-issue') {
+                card.style.display = card.dataset.hasQuoteIssue === 'true' ? '' : 'none';
+            } else {
+                card.style.display = card.dataset.status === filter ? '' : 'none';
+            }
         });
     });
 });
@@ -373,8 +486,10 @@ document.querySelectorAll('.jf-tab').forEach(tab => {
 // ==========================================
 function openOrder(item, status) {
     const v = item.verification || {};
+    const qv = item.quote_verification || {};
     const courtType = item.court_type || 'Unknown';
     const confidence = typeof v.confidence === 'number' ? v.confidence : null;
+    const attributedClaim = item.attributed_claim || '';
 
     const verdictText = {
         'verified': '✅ CITATION UPHELD — Exists in Supreme Court Records',
@@ -384,7 +499,7 @@ function openOrder(item, status) {
     };
 
     let sectionIdx = 0;
-    const nextSection = () => ['I','II','III','IV','V','VI'][sectionIdx++];
+    const nextSection = () => ['I','II','III','IV','V','VI','VII','VIII'][sectionIdx++];
     let html = '';
 
     html += `<div class="order-section"><div class="order-verdict-banner ${status}">${verdictText[status]}</div></div>`;
@@ -421,6 +536,21 @@ function openOrder(item, status) {
             </div>
         </div>`;
 
+    // Attributed claim section
+    if (attributedClaim) {
+        html += `
+            <div class="order-section">
+                <div class="order-section-title">${nextSection()}. ATTRIBUTED CLAIM / QUOTE</div>
+                <div class="order-field">
+                    <div class="of-label">WHAT THE LAWYER CLAIMED THIS CASE STATES</div>
+                    <div class="of-value order-quote-block">
+                        <i class="fas fa-quote-left" style="color:var(--gold);opacity:0.5;margin-right:6px;"></i>
+                        "${esc(attributedClaim)}"
+                    </div>
+                </div>
+            </div>`;
+    }
+
     if (status === 'verified') {
         html += `
             <div class="order-section">
@@ -436,6 +566,57 @@ function openOrder(item, status) {
                     </div>
                 </div>
             </div>`;
+    }
+
+    // QUOTE VERIFICATION SECTION (RAG)
+    if (qv && qv.status) {
+        const qvStatusClass = classifyQuoteStatus(qv);
+        const qvStatusColors = {
+            'quote-ok': '#4caf8a',
+            'quote-contradicted': '#e87777',
+            'quote-unsupported': '#e8b877',
+            'quote-fabricated': '#e87777',
+            'quote-skipped': '#aaa',
+            'quote-error': '#aaa'
+        };
+        
+        html += `
+            <div class="order-section order-quote-section">
+                <div class="order-section-title">${nextSection()}. QUOTE VERIFICATION (RAG ENGINE)</div>
+                <div class="order-field">
+                    <div class="of-label">VERIFICATION STATUS</div>
+                    <div class="of-value" style="color:${qvStatusColors[qvStatusClass] || 'var(--text-primary)'}; font-weight:600;">
+                        ${esc(qv.status)}
+                    </div>
+                </div>
+                <div class="order-field">
+                    <div class="of-label">REASONING</div>
+                    <div class="of-value" style="font-style:italic;">
+                        "${esc(qv.reason || qv.explanation || 'No reasoning provided.')}"
+                    </div>
+                </div>`;
+        
+        if (qv.found_paragraph) {
+            html += `
+                <div class="order-field">
+                    <div class="of-label">MOST RELEVANT PARAGRAPH FROM SOURCE JUDGMENT</div>
+                    <div class="of-value order-source-paragraph">
+                        ${esc(qv.found_paragraph)}
+                    </div>
+                </div>`;
+        }
+        
+        if (qv.closest_text_found) {
+            html += `
+                <div class="order-field">
+                    <div class="of-label">CLOSEST TEXT FOUND (LOW SIMILARITY)</div>
+                    <div class="of-value order-source-paragraph" style="border-color:rgba(232,119,119,0.3);">
+                        ${esc(qv.closest_text_found)}
+                    </div>
+                </div>`;
+        }
+        
+        html += `</div>`;
     }
 
     if (status === 'skipped') {
@@ -472,7 +653,12 @@ function openOrder(item, status) {
             <div class="order-section-title">${nextSection()}. VERIFICATION DATA</div>
             <div class="order-field">
                 <div class="of-label">RAW JSON RESPONSE</div>
-                <pre style="font-family:var(--font-mono);font-size:0.65rem;color:var(--text-secondary);white-space:pre-wrap;word-break:break-all;line-height:1.6;margin:0;">${esc(JSON.stringify({ court_type: courtType, verification: v }, null, 2))}</pre>
+                <pre style="font-family:var(--font-mono);font-size:0.65rem;color:var(--text-secondary);white-space:pre-wrap;word-break:break-all;line-height:1.6;margin:0;">${esc(JSON.stringify({ 
+                    court_type: courtType, 
+                    attributed_claim: attributedClaim || undefined,
+                    verification: v,
+                    quote_verification: Object.keys(qv).length > 0 ? qv : undefined
+                }, null, 2))}</pre>
             </div>
         </div>`;
 
@@ -482,7 +668,12 @@ function openOrder(item, status) {
 
 orderClose.addEventListener('click', () => orderOverlay.classList.add('hidden'));
 orderOverlay.addEventListener('click', (e) => { if (e.target === orderOverlay) orderOverlay.classList.add('hidden'); });
-document.addEventListener('keydown', (e) => { if (e.key === 'Escape') { orderOverlay.classList.add('hidden'); document.getElementById('summary-overlay').classList.add('hidden'); } });
+document.addEventListener('keydown', (e) => { 
+    if (e.key === 'Escape') { 
+        orderOverlay.classList.add('hidden'); 
+        document.getElementById('summary-overlay').classList.add('hidden'); 
+    } 
+});
 
 // ==========================================
 // 9. MANUAL CITATION SEARCH
@@ -577,7 +768,7 @@ bulkFileInput.addEventListener('change', (e) => addBulkFiles([...e.target.files]
 function addBulkFiles(files) {
     const pdfs = files.filter(f => f.name.toLowerCase().endsWith('.pdf'));
     if (pdfs.length === 0) { showToast('Please select PDF files only.', 'error'); return; }
-    bulkFiles = [...bulkFiles, ...pdfs].slice(0, 10); // Max 10 files
+    bulkFiles = [...bulkFiles, ...pdfs].slice(0, 10);
     renderBulkFileList();
     bulkAuditBtn.disabled = bulkFiles.length === 0;
 }
@@ -644,6 +835,10 @@ function renderBulkResults(results, container) {
     const totalCitations = results.reduce((s, r) => s + (r.total_citations_found || 0), 0);
     const totalVerified  = results.reduce((s, r) => s + (r.results || []).filter(x => classifyStatus(x) === 'verified').length, 0);
     const totalFabricatedC = results.reduce((s, r) => s + (r.results || []).filter(x => classifyStatus(x) === 'hallucinated').length, 0);
+    const totalQuoteIssues = results.reduce((s, r) => s + (r.results || []).filter(x => {
+        const qs = (x.quote_verification?.status || '').toLowerCase();
+        return qs.includes('contradicted') || qs.includes('unsupported') || qs.includes('fabricated');
+    }).length, 0);
 
     container.innerHTML = `
         <div class="bulk-summary-header">
@@ -651,6 +846,7 @@ function renderBulkResults(results, container) {
             <div class="bulk-stat"><div class="bs-num">${totalCitations}</div><div class="bs-label">Citations</div></div>
             <div class="bulk-stat upheld"><div class="bs-num">${totalVerified}</div><div class="bs-label">Verified</div></div>
             <div class="bulk-stat fabricated"><div class="bs-num">${totalFabricatedC}</div><div class="bs-label">Fabricated</div></div>
+            <div class="bulk-stat quote-issues"><div class="bs-num">${totalQuoteIssues}</div><div class="bs-label">Quote Issues</div></div>
         </div>
         ${results.map(r => `
         <div class="bulk-doc-card ${r.success ? '' : 'error'}">
@@ -664,6 +860,10 @@ function renderBulkResults(results, container) {
                 <span>✅ ${(r.results || []).filter(x => classifyStatus(x) === 'verified').length} verified</span>
                 <span>❌ ${(r.results || []).filter(x => classifyStatus(x) === 'hallucinated').length} fabricated</span>
                 <span>⚠️ ${(r.results || []).filter(x => classifyStatus(x) === 'skipped').length} HC</span>
+                <span>📝 ${(r.results || []).filter(x => {
+                    const qs = (x.quote_verification?.status || '').toLowerCase();
+                    return qs.includes('contradicted') || qs.includes('fabricated');
+                }).length} quote issues</span>
             </div>` : `<p style="color:#e87777;font-size:0.8rem;">${esc(r.error)}</p>`}
         </div>`).join('')}`;
 }
@@ -673,366 +873,372 @@ function renderBulkResults(results, container) {
 // ==========================================
 function exportCSV() {
     if (!auditData.length) { showToast('No audit data to export.', 'warning'); return; }
-    const rows = [['#', 'Citation', 'Court Type', 'Status', 'Confidence', 'Matched Name', 'Reason/Message']];
+    const rows = [['#', 'Citation', 'Court Type', 'Status', 'Confidence', 'Matched Name', 'Reason/Message', 'Attributed Claim', 'Quote Status', 'Quote Reason']];
     auditData.forEach((item, i) => {
         const v = item.verification || {};
+        const qv = item.quote_verification || {};
         rows.push([
             i + 1,
             `"${(item.target_citation || '').replace(/"/g, '""')}"`,
-            `"${(item.court_type || '').replace(/"/g, '""')}"`,
-            `"${(v.status || '').replace(/"/g, '""')}"`,
+            item.court_type || '',
+            v.status || '',
             v.confidence ?? '',
-            `"${(v.matched_name || '').replace(/"/g, '""')}"`,
-            `"${(v.reason || v.message || '').replace(/"/g, '""')}"`
+            v.matched_name || '',
+            `"${(v.reason || v.message || '').replace(/"/g, '""')}"`,
+            `"${(item.attributed_claim || '').replace(/"/g, '""')}"`,
+            qv.status || '',
+            `"${(qv.reason || qv.explanation || '').replace(/"/g, '""')}"`
         ]);
     });
     const csv = rows.map(r => r.join(',')).join('\n');
-    downloadFile('audit-report.csv', csv, 'text/csv');
-    showToast('CSV report downloaded.', 'success');
+    downloadFile(csv, 'citation_audit_report.csv', 'text/csv');
+    showToast('CSV exported successfully.', 'success');
 }
 
 function exportPDF() {
     if (!auditData.length) { showToast('No audit data to export.', 'warning'); return; }
-    const { jsPDF } = window.jspdf;
-    const doc = new jsPDF({ orientation: 'portrait', unit: 'mm', format: 'a4' });
-    const pageWidth = doc.internal.pageSize.getWidth();
-    let y = 20;
-
-    // Header
-    doc.setFillColor(15, 12, 30);
-    doc.rect(0, 0, pageWidth, 40, 'F');
-    doc.setTextColor(212, 175, 55);
-    doc.setFontSize(16);
-    doc.setFont('helvetica', 'bold');
-    doc.text('LEGAL CITATION AUDIT REPORT', pageWidth / 2, 18, { align: 'center' });
-    doc.setFontSize(9);
-    doc.setFont('helvetica', 'normal');
-    doc.setTextColor(180, 180, 200);
-    doc.text('Supreme Court of India • AI Citation Integrity Verification', pageWidth / 2, 26, { align: 'center' });
-    doc.text(`Generated: ${new Date().toLocaleString('en-IN')} • Session: ${sessionId.textContent}`, pageWidth / 2, 33, { align: 'center' });
-    y = 55;
-
-    // Stats box
-    const total = auditData.length;
-    const verified = auditData.filter(r => classifyStatus(r) === 'verified').length;
-    const fabricated = auditData.filter(r => classifyStatus(r) === 'hallucinated').length;
-    const skipped = auditData.filter(r => classifyStatus(r) === 'skipped').length;
-    const unverified = total - verified - fabricated - skipped;
-
-    doc.setFillColor(30, 25, 60);
-    doc.roundedRect(10, y, pageWidth - 20, 28, 3, 3, 'F');
-    doc.setFontSize(10);
-    doc.setFont('helvetica', 'bold');
-
-    const statItems = [
-        { label: 'TOTAL', val: total, color: [212, 175, 55] },
-        { label: 'UPHELD', val: verified, color: [76, 175, 130] },
-        { label: 'FABRICATED', val: fabricated, color: [232, 119, 119] },
-        { label: 'HC', val: skipped, color: [232, 184, 119] },
-        { label: 'UNVERIFIED', val: unverified, color: [170, 170, 170] }
-    ];
-    statItems.forEach((s, i) => {
-        const x = 15 + i * 38;
-        doc.setTextColor(...s.color);
-        doc.setFontSize(14);
-        doc.text(String(s.val), x, y + 14);
-        doc.setFontSize(7);
-        doc.setTextColor(150, 150, 170);
-        doc.text(s.label, x, y + 22);
-    });
-    y += 38;
-
-    // Citation rows
-    auditData.forEach((item, i) => {
-        if (y > 260) { doc.addPage(); y = 20; }
-        const status = classifyStatus(item);
-        const v = item.verification || {};
-        const bgColors = {
-            'verified': [20, 50, 35], 'hallucinated': [60, 20, 20],
-            'skipped': [50, 40, 10], 'no-match': [30, 30, 50]
-        };
-        doc.setFillColor(...(bgColors[status] || [30, 30, 60]));
-        doc.roundedRect(10, y, pageWidth - 20, 22, 2, 2, 'F');
-
-        doc.setFontSize(8);
-        doc.setFont('helvetica', 'bold');
-        doc.setTextColor(212, 175, 55);
-        doc.text(`#${String(i+1).padStart(3,'0')}`, 14, y + 8);
-
-        const citation = (item.target_citation || '').substring(0, 65);
-        doc.setTextColor(230, 230, 240);
-        doc.text(citation + (item.target_citation.length > 65 ? '...' : ''), 28, y + 8);
-
-        const statusColors2 = {
-            'verified': [76, 200, 130], 'hallucinated': [232, 100, 100],
-            'skipped': [232, 184, 119], 'no-match': [150, 150, 170]
-        };
-        const statusLabels2 = { 'verified': 'UPHELD', 'hallucinated': 'FABRICATED', 'skipped': 'HC', 'no-match': 'UNVERIFIED' };
-        doc.setTextColor(...(statusColors2[status] || [150, 150, 170]));
-        doc.setFont('helvetica', 'bold');
-        doc.setFontSize(7);
-        doc.text(statusLabels2[status] || 'UNKNOWN', pageWidth - 12, y + 8, { align: 'right' });
-
-        if (v.matched_name) {
-            doc.setFont('helvetica', 'italic');
-            doc.setTextColor(170, 170, 200);
-            doc.setFontSize(7);
-            doc.text(`Match: ${v.matched_name.substring(0, 80)}`, 28, y + 15);
-        }
-        if (typeof v.confidence === 'number') {
-            doc.setFont('helvetica', 'normal');
-            doc.setTextColor(150, 150, 170);
-            doc.text(`Confidence: ${v.confidence}%`, pageWidth - 12, y + 15, { align: 'right' });
-        }
-        y += 26;
-    });
-
-    // Footer
-    doc.setFontSize(7);
-    doc.setTextColor(100, 100, 130);
-    doc.text('Powered by Groq × LLaMA 3.3 70B • This report is for informational purposes only and does not constitute legal advice.', pageWidth / 2, 290, { align: 'center' });
-
-    doc.save(`legal-audit-${Date.now()}.pdf`);
-    showToast('PDF report downloaded.', 'success');
+    try {
+        const { jsPDF } = window.jspdf;
+        const doc = new jsPDF();
+        
+        doc.setFontSize(18);
+        doc.text('Legal Citation Audit Report', 20, 20);
+        doc.setFontSize(10);
+        doc.text(`Generated: ${new Date().toLocaleString('en-IN')}`, 20, 28);
+        doc.text(`Session: ${sessionIdEl.textContent}`, 20, 34);
+        
+        let y = 45;
+        
+        // Summary
+        const verified = auditData.filter(x => classifyStatus(x) === 'verified').length;
+        const fabricated = auditData.filter(x => classifyStatus(x) === 'hallucinated').length;
+        const quoteIssues = auditData.filter(x => {
+            const qs = (x.quote_verification?.status || '').toLowerCase();
+            return qs.includes('contradicted') || qs.includes('fabricated');
+        }).length;
+        
+        doc.setFontSize(12);
+        doc.text('Summary', 20, y); y += 8;
+        doc.setFontSize(9);
+        doc.text(`Total Citations: ${auditData.length}`, 25, y); y += 5;
+        doc.text(`Verified: ${verified}  |  Fabricated: ${fabricated}  |  Quote Issues: ${quoteIssues}`, 25, y); y += 10;
+        
+        doc.setFontSize(12);
+        doc.text('Detailed Results', 20, y); y += 8;
+        
+        auditData.forEach((item, i) => {
+            if (y > 270) { doc.addPage(); y = 20; }
+            const v = item.verification || {};
+            const qv = item.quote_verification || {};
+            doc.setFontSize(9);
+            doc.setFont(undefined, 'bold');
+            doc.text(`${i + 1}. ${truncate(item.target_citation || '', 70)}`, 20, y); y += 5;
+            doc.setFont(undefined, 'normal');
+            doc.text(`   Status: ${v.status || 'Unknown'}  |  Court: ${item.court_type || 'Unknown'}`, 20, y); y += 5;
+            if (v.matched_name) {
+                doc.text(`   Match: ${v.matched_name}`, 20, y); y += 5;
+            }
+            if (item.attributed_claim) {
+                const claimText = truncate(item.attributed_claim, 80);
+                doc.text(`   Claim: "${claimText}"`, 20, y); y += 5;
+            }
+            if (qv.status) {
+                doc.text(`   Quote: ${qv.status}`, 20, y); y += 5;
+            }
+            y += 3;
+        });
+        
+        doc.save('citation_audit_report.pdf');
+        showToast('PDF exported successfully.', 'success');
+    } catch (e) {
+        showToast('PDF export failed: ' + e.message, 'error');
+    }
 }
 
-function exportSummaryPDF() {
-    const bodyEl = document.getElementById('summary-body');
-    const text = bodyEl.innerText;
-    if (!text || text.includes('Generating')) { showToast('Summary not ready yet.', 'warning'); return; }
-    const { jsPDF } = window.jspdf;
-    const doc = new jsPDF();
-    doc.setFontSize(14);
-    doc.setFont('helvetica', 'bold');
-    doc.text('Legal Audit Summary Report', 20, 20);
-    doc.setFontSize(10);
-    doc.setFont('helvetica', 'normal');
-    doc.setTextColor(80, 80, 80);
-    const lines = doc.splitTextToSize(text, 170);
-    doc.text(lines, 20, 35);
-    doc.save(`audit-summary-${Date.now()}.pdf`);
-}
-
-function downloadFile(name, content, type) {
+function downloadFile(content, filename, type) {
     const blob = new Blob([content], { type });
-    const url = URL.createObjectURL(blob);
     const a = document.createElement('a');
-    a.href = url; a.download = name;
-    document.body.appendChild(a); a.click();
-    document.body.removeChild(a); URL.revokeObjectURL(url);
+    a.href = URL.createObjectURL(blob);
+    a.download = filename;
+    a.click();
+    URL.revokeObjectURL(a.href);
 }
 
 // ==========================================
 // 12. AI SUMMARY
 // ==========================================
 async function generateSummary() {
-    if (!lastAuditResponse) { showToast('Run an audit first.', 'warning'); return; }
-    const overlay = document.getElementById('summary-overlay');
-    const body = document.getElementById('summary-body');
-    overlay.classList.remove('hidden');
-    body.innerHTML = `<div class="summary-loading"><i class="fas fa-feather-alt fa-spin" style="font-size:2rem;color:var(--gold);"></i><p>Generating professional summary...</p></div>`;
+    if (!auditData.length) { showToast('No audit data available.', 'warning'); return; }
+    
+    const summaryOverlay = document.getElementById('summary-overlay');
+    const summaryBody = document.getElementById('summary-body');
+    summaryOverlay.classList.remove('hidden');
+    summaryBody.innerHTML = `<div class="summary-loading"><i class="fas fa-feather-alt fa-spin" style="font-size:2rem;color:var(--gold);"></i><p>Generating professional summary with quote verification analysis...</p></div>`;
+
+    const scCount = lastAuditResponse?.supreme_court_count || 0;
+    const hcCount = lastAuditResponse?.high_court_count || 0;
 
     try {
         const resp = await fetch(`${API_BASE}/summarize`, {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify({
-                results: lastAuditResponse.results || [],
-                total: lastAuditResponse.total_citations_found || 0,
-                sc_count: lastAuditResponse.supreme_court_count || 0,
-                hc_count: lastAuditResponse.high_court_count || 0
+                results: auditData,
+                total: auditData.length,
+                sc_count: scCount,
+                hc_count: hcCount
             })
         });
         if (!resp.ok) throw new Error(`HTTP ${resp.status}`);
         const data = await resp.json();
-
+        
         const riskColors = { 'Low': '#4caf8a', 'Medium': '#e8b877', 'High': '#e87777' };
-        const riskColor = riskColors[data.risk_level] || '#aaa';
-
-        body.innerHTML = `
-            <div class="summary-risk-badge" style="background:${riskColor}22;border:1px solid ${riskColor};color:${riskColor};">
-                <i class="fas fa-shield-alt"></i> RISK LEVEL: ${esc(data.risk_level)}
-            </div>
-            <div class="summary-stats-row">
-                <div class="sum-stat up"><span>${data.stats.verified}</span>Verified</div>
-                <div class="sum-stat fab"><span>${data.stats.fabricated}</span>Fabricated</div>
-                <div class="sum-stat sk"><span>${data.stats.skipped}</span>HC</div>
-                <div class="sum-stat un"><span>${data.stats.unverified}</span>Unverified</div>
-            </div>
-            <div class="summary-text">${esc(data.summary).replace(/\n\n/g, '</p><p>').replace(/\n/g, '<br>')}</div>`;
+        
+        summaryBody.innerHTML = `
+            <div class="summary-content">
+                <div class="summary-risk-badge" style="background:${riskColors[data.risk_level] || '#aaa'}20; border:1px solid ${riskColors[data.risk_level] || '#aaa'}; color:${riskColors[data.risk_level] || '#aaa'}; padding:0.5rem 1rem; border-radius:6px; text-align:center; font-weight:700; margin-bottom:1rem;">
+                    RISK LEVEL: ${data.risk_level || 'Unknown'}
+                </div>
+                <div class="summary-stats" style="display:grid;grid-template-columns:repeat(4,1fr);gap:0.5rem;margin-bottom:1rem;">
+                    <div style="text-align:center;padding:0.5rem;background:rgba(76,175,138,0.1);border-radius:6px;">
+                        <div style="font-size:1.2rem;font-weight:700;color:#4caf8a;">${data.stats?.verified || 0}</div>
+                        <div style="font-size:0.7rem;color:var(--text-secondary);">Verified</div>
+                    </div>
+                    <div style="text-align:center;padding:0.5rem;background:rgba(232,119,119,0.1);border-radius:6px;">
+                        <div style="font-size:1.2rem;font-weight:700;color:#e87777;">${data.stats?.fabricated || 0}</div>
+                        <div style="font-size:0.7rem;color:var(--text-secondary);">Fabricated</div>
+                    </div>
+                    <div style="text-align:center;padding:0.5rem;background:rgba(232,184,119,0.1);border-radius:6px;">
+                        <div style="font-size:1.2rem;font-weight:700;color:#e8b877;">${data.stats?.skipped || 0}</div>
+                        <div style="font-size:0.7rem;color:var(--text-secondary);">HC Skipped</div>
+                    </div>
+                    <div style="text-align:center;padding:0.5rem;background:rgba(170,170,170,0.1);border-radius:6px;">
+                        <div style="font-size:1.2rem;font-weight:700;color:#aaa;">${data.stats?.unverified || 0}</div>
+                        <div style="font-size:0.7rem;color:var(--text-secondary);">Unverified</div>
+                    </div>
+                </div>
+                <div class="summary-text" style="line-height:1.8;color:var(--text-primary);white-space:pre-wrap;">${esc(data.summary)}</div>
+            </div>`;
+        
+        lastSummaryText = data.summary;
     } catch (err) {
-        body.innerHTML = `<p style="color:#e87777;">Failed to generate summary: ${esc(err.message)}</p>`;
+        summaryBody.innerHTML = `<div class="search-error"><i class="fas fa-exclamation-triangle"></i><p>Summary generation failed: ${esc(err.message)}</p></div>`;
+    }
+}
+
+let lastSummaryText = '';
+
+function exportSummaryPDF() {
+    if (!lastSummaryText) { showToast('No summary to export.', 'warning'); return; }
+    try {
+        const { jsPDF } = window.jspdf;
+        const doc = new jsPDF();
+        doc.setFontSize(16);
+        doc.text('AI Audit Summary Report', 20, 20);
+        doc.setFontSize(10);
+        doc.text(`Generated: ${new Date().toLocaleString('en-IN')}`, 20, 28);
+        doc.setFontSize(10);
+        const lines = doc.splitTextToSize(lastSummaryText, 170);
+        doc.text(lines, 20, 40);
+        doc.save('ai_audit_summary.pdf');
+        showToast('Summary PDF exported.', 'success');
+    } catch (e) {
+        showToast('Export failed: ' + e.message, 'error');
     }
 }
 
 // ==========================================
-// 13. AUDIT HISTORY
+// 13. HISTORY
 // ==========================================
 function saveToHistory(data, filename) {
-    const history = JSON.parse(localStorage.getItem('lca_history') || '[]');
-    const entry = {
+    const history = JSON.parse(localStorage.getItem('auditHistory') || '[]');
+    
+    const quoteIssues = (data.results || []).filter(x => {
+        const qs = (x.quote_verification?.status || '').toLowerCase();
+        return qs.includes('contradicted') || qs.includes('fabricated');
+    }).length;
+    
+    history.unshift({
         id: Date.now(),
         filename,
-        timestamp: new Date().toISOString(),
+        date: new Date().toISOString(),
         total: data.total_citations_found || 0,
         sc: data.supreme_court_count || 0,
         hc: data.high_court_count || 0,
-        verified:    (data.results || []).filter(r => classifyStatus(r) === 'verified').length,
-        fabricated:  (data.results || []).filter(r => classifyStatus(r) === 'hallucinated').length,
-        skipped:     (data.results || []).filter(r => classifyStatus(r) === 'skipped').length,
-        results:     data.results || []
-    };
-    history.unshift(entry);
-    if (history.length > 50) history.pop();
-    localStorage.setItem('lca_history', JSON.stringify(history));
+        verified: (data.results || []).filter(x => classifyStatus(x) === 'verified').length,
+        fabricated: (data.results || []).filter(x => classifyStatus(x) === 'hallucinated').length,
+        quoteIssues: quoteIssues,
+        results: data.results
+    });
+    
+    // Keep only last 50
+    if (history.length > 50) history.length = 50;
+    localStorage.setItem('auditHistory', JSON.stringify(history));
 }
 
 function renderHistory() {
-    const history = JSON.parse(localStorage.getItem('lca_history') || '[]');
+    const history = JSON.parse(localStorage.getItem('auditHistory') || '[]');
     const list = document.getElementById('history-list');
-    const countEl = document.getElementById('history-count');
-    countEl.textContent = `${history.length} record${history.length !== 1 ? 's' : ''}`;
+    const count = document.getElementById('history-count');
+    count.textContent = `${history.length} records`;
 
-    if (!history.length) {
+    if (history.length === 0) {
         list.innerHTML = `<div class="history-empty"><i class="fas fa-history" style="font-size:3rem;color:var(--gold);opacity:0.3;"></i><p>No audit history yet.</p></div>`;
         return;
     }
 
-    list.innerHTML = history.map(entry => `
-        <div class="history-item" onclick="restoreFromHistory('${entry.id}')">
-            <div class="hi-left">
-                <div class="hi-icon"><i class="fas fa-file-contract"></i></div>
-                <div class="hi-info">
-                    <div class="hi-filename">${esc(entry.filename)}</div>
-                    <div class="hi-date">${new Date(entry.timestamp).toLocaleString('en-IN')}</div>
-                </div>
+    list.innerHTML = history.map(h => `
+        <div class="history-item" onclick='loadHistoryItem(${h.id})'>
+            <div class="hi-top">
+                <div class="hi-file"><i class="fas fa-file-pdf" style="color:var(--gold);margin-right:6px;"></i>${esc(h.filename)}</div>
+                <div class="hi-date">${new Date(h.date).toLocaleDateString('en-IN', { day: '2-digit', month: 'short', year: 'numeric', hour: '2-digit', minute: '2-digit' })}</div>
             </div>
             <div class="hi-stats">
-                <span class="hi-stat up" title="Verified">✅ ${entry.verified}</span>
-                <span class="hi-stat fab" title="Fabricated">❌ ${entry.fabricated}</span>
-                <span class="hi-stat hc" title="High Court">🏛️ ${entry.hc}</span>
-                <span class="hi-stat total" title="Total">${entry.total} total</span>
+                <span>📜 ${h.total} citations</span>
+                <span>✅ ${h.verified} verified</span>
+                <span>❌ ${h.fabricated} fabricated</span>
+                <span>⚖️ ${h.sc} SC / ${h.hc} HC</span>
+                ${h.quoteIssues ? `<span>📝 ${h.quoteIssues} quote issues</span>` : ''}
             </div>
-            <button class="hi-delete" onclick="event.stopPropagation();deleteHistoryItem(${entry.id})" title="Delete">
-                <i class="fas fa-trash"></i>
-            </button>
         </div>`).join('');
 }
 
-function restoreFromHistory(id) {
-    const history = JSON.parse(localStorage.getItem('lca_history') || '[]');
-    const entry = history.find(h => h.id == id);
-    if (!entry) return;
-    auditData = entry.results;
+function loadHistoryItem(id) {
+    const history = JSON.parse(localStorage.getItem('auditHistory') || '[]');
+    const item = history.find(h => h.id === id);
+    if (!item) return;
+    
+    auditData = item.results || [];
     lastAuditResponse = {
-        results: entry.results,
-        total_citations_found: entry.total,
-        supreme_court_count: entry.sc,
-        high_court_count: entry.hc
+        results: item.results,
+        total_citations_found: item.total,
+        supreme_court_count: item.sc,
+        high_court_count: item.hc
     };
+    
     switchTab('audit');
     renderJudgments(lastAuditResponse);
-    showToast(`Loaded audit: ${entry.filename}`, 'info');
-}
-
-function deleteHistoryItem(id) {
-    let history = JSON.parse(localStorage.getItem('lca_history') || '[]');
-    history = history.filter(h => h.id != id);
-    localStorage.setItem('lca_history', JSON.stringify(history));
-    renderHistory();
+    showToast(`Loaded history: ${item.filename}`, 'info');
 }
 
 function clearHistory() {
-    if (!confirm('Clear all audit history?')) return;
-    localStorage.removeItem('lca_history');
-    renderHistory();
-    showToast('History cleared.', 'info');
+    if (confirm('Clear all audit history?')) {
+        localStorage.removeItem('auditHistory');
+        renderHistory();
+        showToast('History cleared.', 'info');
+    }
 }
 
 // ==========================================
 // 14. CHATBOT
 // ==========================================
 let chatHistory = [];
-let auditContextEnabled = false;
+let useAuditContext = false;
 
 function toggleChat() {
     const pane = document.getElementById('chat-pane');
     pane.classList.toggle('hidden');
-    if (!pane.classList.contains('hidden')) {
-        document.getElementById('chat-notification').style.display = 'none';
-        document.getElementById('chat-input').focus();
-    }
+    document.getElementById('chat-notification').style.display = 'none';
 }
 
 function toggleAuditContext() {
-    auditContextEnabled = !auditContextEnabled;
-    const btn = document.getElementById('ctx-btn');
+    useAuditContext = !useAuditContext;
     const bar = document.getElementById('chat-context-bar');
-    btn.style.color = auditContextEnabled ? 'var(--gold)' : '';
-    bar.classList.toggle('hidden', !auditContextEnabled);
-    if (auditContextEnabled && !lastAuditResponse) {
-        showToast('Run an audit first to use audit context.', 'warning');
-        auditContextEnabled = false;
-        btn.style.color = '';
+    const btn = document.getElementById('ctx-btn');
+    if (useAuditContext) {
+        bar.classList.remove('hidden');
+        btn.classList.add('active');
+        if (!lastAuditResponse) {
+            showToast('No audit data yet. Run an audit first!', 'warning');
+        }
+    } else {
         bar.classList.add('hidden');
+        btn.classList.remove('active');
     }
 }
 
 function clearChat() {
     chatHistory = [];
-    document.getElementById('chat-messages').innerHTML = `
+    const messages = document.getElementById('chat-messages');
+    messages.innerHTML = `
         <div class="chat-msg assistant">
             <div class="msg-avatar">⚖️</div>
-            <div class="msg-bubble"><p>Chat cleared. How can I assist you?</p></div>
+            <div class="msg-bubble">
+                <p>Chat cleared. How can I help you?</p>
+            </div>
         </div>`;
+    document.getElementById('chat-suggestions').style.display = '';
 }
 
-function handleChatKey(e) {
-    if (e.key === 'Enter' && !e.shiftKey) {
-        e.preventDefault();
+function sendSuggestion(text) {
+    document.getElementById('chat-input').value = text;
+    sendChatMessage();
+}
+
+function handleChatKey(event) {
+    if (event.key === 'Enter' && !event.shiftKey) {
+        event.preventDefault();
         sendChatMessage();
     }
 }
 
 function autoResizeChat(el) {
     el.style.height = 'auto';
-    el.style.height = Math.min(el.scrollHeight, 120) + 'px';
-}
-
-function sendSuggestion(text) {
-    document.getElementById('chat-input').value = text;
-    sendChatMessage();
-    document.getElementById('chat-suggestions').style.display = 'none';
+    el.style.height = Math.min(el.scrollHeight, 100) + 'px';
 }
 
 async function sendChatMessage() {
     const input = document.getElementById('chat-input');
-    const sendBtn = document.getElementById('chat-send-btn');
     const messages = document.getElementById('chat-messages');
-    const text = input.value.trim();
-    if (!text) return;
+    const msg = input.value.trim();
+    if (!msg) return;
+
+    // Hide suggestions
+    document.getElementById('chat-suggestions').style.display = 'none';
 
     // Add user message
-    chatHistory.push({ role: 'user', content: text });
-    appendChatMessage('user', text, messages);
+    messages.innerHTML += `
+        <div class="chat-msg user">
+            <div class="msg-bubble">${esc(msg)}</div>
+        </div>`;
+    chatHistory.push({ role: 'user', content: msg });
     input.value = '';
     input.style.height = 'auto';
-    sendBtn.disabled = true;
 
-    // Typing indicator
-    const typingId = 'typing-' + Date.now();
-    messages.insertAdjacentHTML('beforeend', `
-        <div class="chat-msg assistant" id="${typingId}">
-            <div class="msg-avatar">⚖️</div>
-            <div class="msg-bubble"><div class="typing-dots"><span></span><span></span><span></span></div></div>
-        </div>`);
+    // Scroll down
     messages.scrollTop = messages.scrollHeight;
 
-    let auditContext = null;
-    if (auditContextEnabled && lastAuditResponse) {
-        const v = lastAuditResponse.results?.filter(r => classifyStatus(r) === 'verified').length || 0;
-        const f = lastAuditResponse.results?.filter(r => classifyStatus(r) === 'hallucinated').length || 0;
-        auditContext = `Last audit found ${lastAuditResponse.total_citations_found} citations: ${v} verified, ${f} fabricated.`;
+    // Show typing indicator
+    const typingId = 'typing-' + Date.now();
+    messages.innerHTML += `
+        <div class="chat-msg assistant" id="${typingId}">
+            <div class="msg-avatar">⚖️</div>
+            <div class="msg-bubble typing-indicator">
+                <span></span><span></span><span></span>
+            </div>
+        </div>`;
+    messages.scrollTop = messages.scrollHeight;
+
+    // Build audit context string
+    let auditCtx = null;
+    if (useAuditContext && lastAuditResponse) {
+        const results = lastAuditResponse.results || [];
+        const verified = results.filter(x => classifyStatus(x) === 'verified').length;
+        const fabricated = results.filter(x => classifyStatus(x) === 'hallucinated').length;
+        const quoteIssues = results.filter(x => {
+            const qs = (x.quote_verification?.status || '').toLowerCase();
+            return qs.includes('contradicted') || qs.includes('fabricated');
+        }).length;
+        
+        const fabricatedNames = results.filter(x => classifyStatus(x) === 'hallucinated').map(x => x.target_citation).slice(0, 5);
+        const quoteIssueNames = results.filter(x => {
+            const qs = (x.quote_verification?.status || '').toLowerCase();
+            return qs.includes('contradicted') || qs.includes('fabricated');
+        }).map(x => `${x.target_citation}: ${x.quote_verification?.status}`).slice(0, 5);
+        
+        auditCtx = `Last audit: ${results.length} citations total. ${verified} verified, ${fabricated} fabricated, ${quoteIssues} quote issues. ` +
+            (fabricatedNames.length ? `Fabricated: ${fabricatedNames.join(', ')}. ` : '') +
+            (quoteIssueNames.length ? `Quote issues: ${quoteIssueNames.join('; ')}. ` : '');
     }
 
     try {
@@ -1040,106 +1246,107 @@ async function sendChatMessage() {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify({
-                message: text,
+                message: msg,
                 history: chatHistory.slice(-10),
-                audit_context: auditContext
+                audit_context: auditCtx
             })
         });
         if (!resp.ok) throw new Error(`HTTP ${resp.status}`);
         const data = await resp.json();
+        
+        // Remove typing indicator
+        const typingEl = document.getElementById(typingId);
+        if (typingEl) typingEl.remove();
 
-        document.getElementById(typingId)?.remove();
-        const reply = data.reply || 'I apologize, I could not process that request.';
+        // Add assistant response
+        const reply = data.reply || 'I apologize, I could not generate a response.';
+        messages.innerHTML += `
+            <div class="chat-msg assistant">
+                <div class="msg-avatar">⚖️</div>
+                <div class="msg-bubble">${formatChatResponse(reply)}</div>
+            </div>`;
         chatHistory.push({ role: 'assistant', content: reply });
-        appendChatMessage('assistant', reply, messages);
+        messages.scrollTop = messages.scrollHeight;
     } catch (err) {
-        document.getElementById(typingId)?.remove();
-        appendChatMessage('assistant', `⚠️ Error: ${err.message}`, messages);
-    } finally {
-        sendBtn.disabled = false;
-        input.focus();
+        const typingEl = document.getElementById(typingId);
+        if (typingEl) typingEl.remove();
+        messages.innerHTML += `
+            <div class="chat-msg assistant">
+                <div class="msg-avatar">⚖️</div>
+                <div class="msg-bubble" style="color:#e87777;">Error: ${esc(err.message)}</div>
+            </div>`;
+        messages.scrollTop = messages.scrollHeight;
     }
 }
 
-function appendChatMessage(role, text, container) {
-    const div = document.createElement('div');
-    div.className = `chat-msg ${role}`;
-    // Format text — convert **bold** and line breaks
-    const formatted = esc(text)
-        .replace(/\*\*(.*?)\*\*/g, '<strong>$1</strong>')
-        .replace(/\n/g, '<br>');
-    div.innerHTML = role === 'assistant'
-        ? `<div class="msg-avatar">⚖️</div><div class="msg-bubble">${formatted}</div>`
-        : `<div class="msg-bubble">${formatted}</div>`;
-    container.appendChild(div);
-    container.scrollTop = container.scrollHeight;
+function formatChatResponse(text) {
+    // Convert markdown-like formatting
+    let html = esc(text);
+    // Bold
+    html = html.replace(/\*\*(.*?)\*\*/g, '<strong>$1</strong>');
+    // Italic
+    html = html.replace(/\*(.*?)\*/g, '<em>$1</em>');
+    // Bullet points
+    html = html.replace(/^- (.*)/gm, '<li>$1</li>');
+    html = html.replace(/(<li>.*<\/li>)/s, '<ul>$1</ul>');
+    // Line breaks
+    html = html.replace(/\n/g, '<br>');
+    return html;
 }
 
 // ==========================================
-// 15. UTILITIES
+// 15. UTILITY FUNCTIONS
 // ==========================================
 function esc(str) {
     if (!str) return '';
-    const d = document.createElement('div');
-    d.textContent = str;
-    return d.innerHTML;
+    const div = document.createElement('div');
+    div.textContent = String(str);
+    return div.innerHTML;
 }
 
-function truncate(str, max) {
+function truncate(str, maxLen) {
     if (!str) return '';
-    return str.length > max ? str.substring(0, max) + '…' : str;
+    return str.length > maxLen ? str.substring(0, maxLen) + '...' : str;
 }
 
 function animateNum(el, target) {
-    const duration = 900;
+    if (!el) return;
+    const duration = 600;
+    const start = parseInt(el.textContent) || 0;
     const startTime = performance.now();
-    function update(now) {
-        const elapsed = now - startTime;
+    
+    function update(currentTime) {
+        const elapsed = currentTime - startTime;
         const progress = Math.min(elapsed / duration, 1);
-        const eased = 1 - Math.pow(1 - progress, 3);
-        el.textContent = Math.round(target * eased);
+        const eased = 1 - Math.pow(1 - progress, 3); // easeOutCubic
+        el.textContent = Math.round(start + (target - start) * eased);
         if (progress < 1) requestAnimationFrame(update);
     }
     requestAnimationFrame(update);
 }
 
 function showToast(message, type = 'info') {
-    const icons = { success: 'check-circle', error: 'exclamation-triangle', info: 'info-circle', warning: 'exclamation-circle' };
     const toast = document.createElement('div');
-    toast.className = `toast ${type}`;
-    toast.innerHTML = `<i class="fas fa-${icons[type] || 'info-circle'}"></i><span>${esc(message)}</span>`;
+    toast.className = `toast toast-${type}`;
+    
+    const icons = { success: 'fa-check-circle', error: 'fa-times-circle', warning: 'fa-exclamation-triangle', info: 'fa-info-circle' };
+    toast.innerHTML = `<i class="fas ${icons[type] || icons.info}"></i><span>${esc(message)}</span>`;
+    
     toastContainer.appendChild(toast);
-    setTimeout(() => toast.remove(), 3800);
+    
+    // Trigger animation
+    requestAnimationFrame(() => toast.classList.add('show'));
+    
+    setTimeout(() => {
+        toast.classList.remove('show');
+        toast.classList.add('hide');
+        setTimeout(() => toast.remove(), 300);
+    }, 4000);
 }
 
 // ==========================================
 // 16. INIT
 // ==========================================
-document.addEventListener('DOMContentLoaded', () => { runOathSequence(); });
-
-// API health check
-fetch(`${API_BASE}/`)
-    .then(r => r.json())
-    .then(d => {
-        const apiInd = document.getElementById('ind-api');
-        apiInd.classList.add('online');
-        apiInd.querySelector('span').textContent = 'API';
-        // Check DB stats
-        return fetch(`${API_BASE}/db-stats`);
-    })
-    .then(r => r.json())
-    .then(d => {
-        const dbInd = document.getElementById('ind-db');
-        if (d.loaded) {
-            dbInd.classList.add('online');
-            document.getElementById('registry-records').textContent = `${d.record_count.toLocaleString()} cases in archive`;
-        } else {
-            dbInd.classList.remove('online');
-            document.getElementById('registry-records').textContent = 'No database loaded';
-        }
-    })
-    .catch(() => {
-        const apiInd = document.getElementById('ind-api');
-        apiInd.classList.remove('online');
-        apiInd.querySelector('span').textContent = 'OFFLINE';
-    });
+document.addEventListener('DOMContentLoaded', () => {
+    runOathSequence();
+});

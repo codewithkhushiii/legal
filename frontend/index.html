@@ -4,7 +4,7 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>⚖️ Legal Citation Auditor — Supreme Court of India</title>
-    <meta name="description" content="AI-powered legal citation verification system for Indian Supreme Court and High Court cases">
+    <meta name="description" content="AI-powered legal citation verification system with RAG-based quote verification">
     <link rel="stylesheet" href="/static/styles.css">
     <link href="https://fonts.googleapis.com/css2?family=Playfair+Display:ital,wght@0,400;0,500;0,600;0,700;0,800;0,900;1,400;1,500&family=Cormorant+Garamond:ital,wght@0,300;0,400;0,500;0,600;0,700;1,300;1,400;1,500&family=JetBrains+Mono:wght@300;400;500;600;700&family=Inter:wght@300;400;500;600;700;800&display=swap" rel="stylesheet">
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.0/css/all.min.css">
@@ -20,7 +20,7 @@
                 <div class="emblem-icon">⚖️</div>
             </div>
             <div class="oath-heading">SUPREME COURT OF INDIA</div>
-            <div class="oath-subheading">Citation Integrity Verification System v2.0</div>
+            <div class="oath-subheading">Citation Integrity & Quote Verification System v2.1</div>
             <div class="oath-divider">
                 <span class="divider-wing left"></span>
                 <span class="divider-diamond">◆</span>
@@ -44,15 +44,20 @@
                 </div>
                 <div class="oath-line" style="--delay: 1.4s">
                     <span class="oath-bullet">§</span>
-                    <span>Engaging Hallucination Detection Protocol...</span>
+                    <span>Loading RAG Embedding Model (MiniLM-L6)...</span>
                     <span class="oath-check">✓</span>
                 </div>
                 <div class="oath-line" style="--delay: 1.8s">
                     <span class="oath-bullet">§</span>
-                    <span>Activating LexAI Legal Chatbot...</span>
+                    <span>Engaging Hallucination Detection Protocol...</span>
                     <span class="oath-check">✓</span>
                 </div>
                 <div class="oath-line" style="--delay: 2.2s">
+                    <span class="oath-bullet">§</span>
+                    <span>Activating Quote Verification Engine...</span>
+                    <span class="oath-check">✓</span>
+                </div>
+                <div class="oath-line" style="--delay: 2.6s">
                     <span class="oath-bullet">§</span>
                     <span>Upholding the Rule of Law...</span>
                     <span class="oath-check">✓</span>
@@ -79,8 +84,8 @@
                     <div class="mini-scales">⚖️</div>
                 </div>
                 <div class="bench-title-block">
-                    <h1 class="bench-title">CITATION AUDITOR <span class="version-badge">v2.0</span></h1>
-                    <p class="bench-subtitle">Supreme Court of India • AI Verification Chamber</p>
+                    <h1 class="bench-title">CITATION AUDITOR <span class="version-badge">v2.1</span></h1>
+                    <p class="bench-subtitle">Supreme Court of India • AI Verification Chamber + RAG</p>
                 </div>
             </div>
             <div class="bench-center">
@@ -96,6 +101,10 @@
                     <div class="bench-indicator online" id="ind-db">
                         <div class="indicator-lamp"></div>
                         <span>DATABASE</span>
+                    </div>
+                    <div class="bench-indicator online" id="ind-rag">
+                        <div class="indicator-lamp"></div>
+                        <span>RAG</span>
                     </div>
                 </div>
             </div>
@@ -122,7 +131,7 @@
             </div>
         </header>
 
-        <!-- ===== TAB CONTENT ===== -->
+        <!-- ===== TAB CONTENT: AUDIT ===== -->
         <main class="courtroom" id="tab-audit">
 
             <!-- LEFT: FILING DESK -->
@@ -219,6 +228,33 @@
                     </div>
                 </div>
 
+                <!-- Quote Verification Summary -->
+                <div class="verdict-summary quote-summary hidden" id="quote-summary">
+                    <div class="quote-summary-title">
+                        <i class="fas fa-quote-left"></i> QUOTE VERIFICATION (RAG)
+                    </div>
+                    <div class="verdict-card quote-verified">
+                        <div class="vc-icon"><i class="fas fa-check-double"></i></div>
+                        <div class="vc-number" id="vc-quote-verified">—</div>
+                        <div class="vc-label">QUOTES OK</div>
+                    </div>
+                    <div class="verdict-card quote-contradicted">
+                        <div class="vc-icon"><i class="fas fa-exclamation-triangle"></i></div>
+                        <div class="vc-number" id="vc-quote-contradicted">—</div>
+                        <div class="vc-label">CONTRADICTED</div>
+                    </div>
+                    <div class="verdict-card quote-unsupported">
+                        <div class="vc-icon"><i class="fas fa-question"></i></div>
+                        <div class="vc-number" id="vc-quote-unsupported">—</div>
+                        <div class="vc-label">UNSUPPORTED</div>
+                    </div>
+                    <div class="verdict-card quote-fabricated">
+                        <div class="vc-icon"><i class="fas fa-ghost"></i></div>
+                        <div class="vc-number" id="vc-quote-fabricated">—</div>
+                        <div class="vc-label">FABRICATED QUOTE</div>
+                    </div>
+                </div>
+
                 <!-- Court Breakdown -->
                 <div class="court-breakdown hidden" id="court-breakdown">
                     <div class="cb-title">
@@ -263,7 +299,7 @@
                     <div class="title-bar-ornament right">◆━━</div>
                 </div>
 
-                <!-- IDLE STATE: Scales -->
+                <!-- IDLE STATE -->
                 <div class="chamber-idle" id="chamber-idle">
                     <div class="idle-scales-container">
                         <div class="scales-beam">
@@ -289,6 +325,7 @@
                     </div>
                     <h3>THE COURT IS IN SESSION</h3>
                     <p>File a document to begin judicial review of cited authorities</p>
+                    <p class="idle-rag-note"><i class="fas fa-brain"></i> RAG-powered quote verification enabled</p>
                 </div>
 
                 <!-- DELIBERATION STATE -->
@@ -326,6 +363,10 @@
                         </div>
                         <div class="d-step" id="ds-5">
                             <div class="d-step-marker">V</div>
+                            <span>RAG Quote Verification</span>
+                        </div>
+                        <div class="d-step" id="ds-6">
+                            <div class="d-step-marker">VI</div>
                             <span>Pronouncing Judgment</span>
                         </div>
                     </div>
@@ -349,6 +390,9 @@
                         </button>
                         <button class="jf-tab" data-filter="no-match">
                             UNVERIFIED <span class="jf-count" id="jf-unverified">0</span>
+                        </button>
+                        <button class="jf-tab" data-filter="quote-issue">
+                            QUOTE ISSUES <span class="jf-count" id="jf-quote-issues">0</span>
                         </button>
                     </div>
 
@@ -458,7 +502,7 @@
         <!-- ===== FOOTER / REGISTRY ===== -->
         <footer class="court-registry">
             <div class="registry-left">
-                <span class="registry-badge">POWERED BY GROQ × LLAMA 3.3 70B</span>
+                <span class="registry-badge">POWERED BY GROQ × LLAMA 3.3 70B × MiniLM-L6 RAG</span>
             </div>
             <div class="registry-center">
                 <span>यतो धर्मस्ततो जयः</span>
@@ -551,7 +595,7 @@
                 <div class="chat-avatar">⚖️</div>
                 <div>
                     <div class="chat-title">LexAI Legal Assistant</div>
-                    <div class="chat-subtitle">Powered by Groq × Llama 3.3</div>
+                    <div class="chat-subtitle">Powered by Groq × Llama 3.3 + RAG</div>
                 </div>
             </div>
             <div class="chat-header-actions">
@@ -577,9 +621,9 @@
                     <p style="margin-top:0.5rem;">I can help you:</p>
                     <ul style="margin:0.25rem 0 0 1rem;font-size:0.85rem;">
                         <li>Explain case law & legal concepts</li>
-                        <li>Analyze your audit results</li>
+                        <li>Analyze your audit results (including quote verification)</li>
                         <li>Research Indian constitutional law</li>
-                        <li>Identify fabricated citations</li>
+                        <li>Identify fabricated citations & misquoted judgments</li>
                     </ul>
                     <p style="margin-top:0.5rem;font-size:0.8rem;color:var(--text-secondary);">Run an audit first, then click the 🔗 button to give me context!</p>
                 </div>
@@ -588,7 +632,7 @@
         <div class="chat-suggestions" id="chat-suggestions">
             <button class="chat-chip" onclick="sendSuggestion('What is a hallucinated citation?')">What is a hallucinated citation?</button>
             <button class="chat-chip" onclick="sendSuggestion('Explain Article 21 of the Indian Constitution')">Article 21</button>
-            <button class="chat-chip" onclick="sendSuggestion('What does SCC stand for in Indian law?')">What is SCC?</button>
+            <button class="chat-chip" onclick="sendSuggestion('How does RAG quote verification work?')">How does RAG work?</button>
         </div>
         <div class="chat-input-area">
             <textarea id="chat-input" class="chat-input" placeholder="Ask any legal question..." rows="1"
