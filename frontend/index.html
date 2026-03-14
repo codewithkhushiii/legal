@@ -4,6 +4,7 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>⚖️ Legal Citation Auditor — Supreme Court of India</title>
+    <meta name="description" content="AI-powered legal citation verification system for Indian Supreme Court and High Court cases">
     <link rel="stylesheet" href="/static/styles.css">
     <link href="https://fonts.googleapis.com/css2?family=Playfair+Display:ital,wght@0,400;0,500;0,600;0,700;0,800;0,900;1,400;1,500&family=Cormorant+Garamond:ital,wght@0,300;0,400;0,500;0,600;0,700;1,300;1,400;1,500&family=JetBrains+Mono:wght@300;400;500;600;700&family=Inter:wght@300;400;500;600;700;800&display=swap" rel="stylesheet">
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.0/css/all.min.css">
@@ -19,7 +20,7 @@
                 <div class="emblem-icon">⚖️</div>
             </div>
             <div class="oath-heading">SUPREME COURT OF INDIA</div>
-            <div class="oath-subheading">Citation Integrity Verification System</div>
+            <div class="oath-subheading">Citation Integrity Verification System v2.0</div>
             <div class="oath-divider">
                 <span class="divider-wing left"></span>
                 <span class="divider-diamond">◆</span>
@@ -48,7 +49,7 @@
                 </div>
                 <div class="oath-line" style="--delay: 1.8s">
                     <span class="oath-bullet">§</span>
-                    <span>Classifying High Court / Supreme Court Authorities...</span>
+                    <span>Activating LexAI Legal Chatbot...</span>
                     <span class="oath-check">✓</span>
                 </div>
                 <div class="oath-line" style="--delay: 2.2s">
@@ -78,7 +79,7 @@
                     <div class="mini-scales">⚖️</div>
                 </div>
                 <div class="bench-title-block">
-                    <h1 class="bench-title">CITATION AUDITOR</h1>
+                    <h1 class="bench-title">CITATION AUDITOR <span class="version-badge">v2.0</span></h1>
                     <p class="bench-subtitle">Supreme Court of India • AI Verification Chamber</p>
                 </div>
             </div>
@@ -99,6 +100,20 @@
                 </div>
             </div>
             <div class="bench-right">
+                <div class="bench-nav-tabs">
+                    <button class="nav-tab active" id="nav-audit" onclick="switchTab('audit')">
+                        <i class="fas fa-gavel"></i> AUDIT
+                    </button>
+                    <button class="nav-tab" id="nav-search" onclick="switchTab('search')">
+                        <i class="fas fa-search"></i> SEARCH
+                    </button>
+                    <button class="nav-tab" id="nav-bulk" onclick="switchTab('bulk')">
+                        <i class="fas fa-layer-group"></i> BULK
+                    </button>
+                    <button class="nav-tab" id="nav-history" onclick="switchTab('history')">
+                        <i class="fas fa-history"></i> HISTORY
+                    </button>
+                </div>
                 <div class="bench-clock" id="bench-clock"></div>
                 <div class="bench-session">
                     <span class="session-label">SESSION</span>
@@ -107,8 +122,8 @@
             </div>
         </header>
 
-        <!-- ===== COURTROOM BODY ===== -->
-        <main class="courtroom">
+        <!-- ===== TAB CONTENT ===== -->
+        <main class="courtroom" id="tab-audit">
 
             <!-- LEFT: FILING DESK -->
             <section class="court-panel filing-desk">
@@ -205,7 +220,7 @@
                 </div>
 
                 <!-- Court Breakdown -->
-                <div class="court-breakdown" id="court-breakdown">
+                <div class="court-breakdown hidden" id="court-breakdown">
                     <div class="cb-title">
                         <i class="fas fa-balance-scale-left"></i>
                         <span>COURT CLASSIFICATION</span>
@@ -224,6 +239,19 @@
                         </div>
                         <div class="cb-bar-count" id="cb-hc-count">0</div>
                     </div>
+                </div>
+
+                <!-- Action Buttons after audit -->
+                <div class="post-audit-actions hidden" id="post-audit-actions">
+                    <button class="action-btn export-pdf-btn" id="export-pdf-btn" onclick="exportPDF()">
+                        <i class="fas fa-file-pdf"></i> Export PDF Report
+                    </button>
+                    <button class="action-btn export-csv-btn" id="export-csv-btn" onclick="exportCSV()">
+                        <i class="fas fa-file-csv"></i> Export CSV
+                    </button>
+                    <button class="action-btn summary-btn" id="summary-btn" onclick="generateSummary()">
+                        <i class="fas fa-file-alt"></i> AI Summary
+                    </button>
                 </div>
             </section>
 
@@ -286,7 +314,7 @@
                         </div>
                         <div class="d-step" id="ds-2">
                             <div class="d-step-marker">II</div>
-                            <span>Identifying & Classifying Authorities</span>
+                            <span>Identifying &amp; Classifying Authorities</span>
                         </div>
                         <div class="d-step" id="ds-3">
                             <div class="d-step-marker">III</div>
@@ -332,6 +360,101 @@
             </section>
         </main>
 
+        <!-- ===== MANUAL SEARCH TAB ===== -->
+        <main class="courtroom search-tab hidden" id="tab-search">
+            <section class="court-panel search-panel" style="flex:1;">
+                <div class="panel-title-bar">
+                    <div class="title-bar-ornament left">━━◆</div>
+                    <h2>MANUAL CITATION SEARCH</h2>
+                    <div class="title-bar-ornament right">◆━━</div>
+                </div>
+                <div class="search-panel-body">
+                    <p class="search-description">Enter any case name or citation to instantly verify it against the Supreme Court archive.</p>
+                    <div class="search-input-group">
+                        <div class="search-input-wrap">
+                            <i class="fas fa-search search-icon"></i>
+                            <input type="text" id="manual-search-input" 
+                                placeholder="e.g. State of Bihar v. Ram Kumar Singh..." 
+                                class="manual-search-input" 
+                                onkeypress="if(event.key==='Enter') runManualSearch()">
+                        </div>
+                        <button class="search-btn" id="search-btn" onclick="runManualSearch()">
+                            <i class="fas fa-gavel"></i> VERIFY
+                        </button>
+                    </div>
+                    <div class="search-examples">
+                        <span class="ex-label">Examples:</span>
+                        <button class="ex-chip" onclick="fillSearch('Vashist Narayan Kumar v. State of Bihar')">Vashist Narayan Kumar v. State of Bihar</button>
+                        <button class="ex-chip" onclick="fillSearch('Divya vs. Union of India')">Divya vs. Union of India</button>
+                        <button class="ex-chip" onclick="fillSearch('Maneka Gandhi v. Union of India')">Maneka Gandhi v. Union of India</button>
+                    </div>
+                    <div class="search-results-area" id="search-results-area">
+                        <div class="search-idle">
+                            <i class="fas fa-balance-scale" style="font-size:3rem;color:var(--gold);opacity:0.3;"></i>
+                            <p>Enter a citation above to verify it</p>
+                        </div>
+                    </div>
+                </div>
+            </section>
+        </main>
+
+        <!-- ===== BULK UPLOAD TAB ===== -->
+        <main class="courtroom bulk-tab hidden" id="tab-bulk">
+            <section class="court-panel bulk-panel" style="flex:1;">
+                <div class="panel-title-bar">
+                    <div class="title-bar-ornament left">━━◆</div>
+                    <h2>BULK DOCUMENT AUDIT</h2>
+                    <div class="title-bar-ornament right">◆━━</div>
+                </div>
+                <div class="bulk-panel-body">
+                    <p class="search-description">Upload multiple PDF documents at once for a combined citation audit.</p>
+                    <div class="bulk-dropzone" id="bulk-dropzone" onclick="document.getElementById('bulk-file-input').click()">
+                        <i class="fas fa-layer-group"></i>
+                        <h3>DROP MULTIPLE PDFS HERE</h3>
+                        <p>Or click to select files</p>
+                        <input type="file" id="bulk-file-input" accept=".pdf" multiple hidden>
+                    </div>
+                    <div class="bulk-file-list" id="bulk-file-list"></div>
+                    <button class="gavel-btn" id="bulk-audit-btn" disabled style="margin-top:1rem;" onclick="runBulkAudit()">
+                        <div class="gavel-bg"></div>
+                        <div class="gavel-content">
+                            <span class="gavel-icon">📋</span>
+                            <span class="gavel-text">AUDIT ALL DOCUMENTS</span>
+                        </div>
+                        <div class="gavel-shine"></div>
+                    </button>
+                    <div class="bulk-progress hidden" id="bulk-progress">
+                        <div class="bulk-progress-bar"><div class="bulk-progress-fill" id="bulk-progress-fill"></div></div>
+                        <div class="bulk-progress-text" id="bulk-progress-text">Processing...</div>
+                    </div>
+                    <div class="bulk-results-area" id="bulk-results-area"></div>
+                </div>
+            </section>
+        </main>
+
+        <!-- ===== HISTORY TAB ===== -->
+        <main class="courtroom history-tab hidden" id="tab-history">
+            <section class="court-panel history-panel" style="flex:1;">
+                <div class="panel-title-bar">
+                    <div class="title-bar-ornament left">━━◆</div>
+                    <h2>AUDIT HISTORY</h2>
+                    <div class="title-bar-ornament right">◆━━</div>
+                </div>
+                <div class="history-toolbar">
+                    <span id="history-count" class="history-count">0 records</span>
+                    <button class="action-btn" onclick="clearHistory()" style="background:rgba(220,50,50,0.15);border-color:rgba(220,50,50,0.3);color:#e87777;">
+                        <i class="fas fa-trash"></i> Clear All
+                    </button>
+                </div>
+                <div class="history-list" id="history-list">
+                    <div class="history-empty">
+                        <i class="fas fa-history" style="font-size:3rem;color:var(--gold);opacity:0.3;"></i>
+                        <p>No audit history yet. Run your first audit to see it here.</p>
+                    </div>
+                </div>
+            </section>
+        </main>
+
         <!-- ===== FOOTER / REGISTRY ===== -->
         <footer class="court-registry">
             <div class="registry-left">
@@ -357,7 +480,7 @@
                     <span class="oh-diamond">◆</span>
                     <span class="oh-line"></span>
                 </div>
-                <h3>JUDGMENT & ORDER</h3>
+                <h3>JUDGMENT &amp; ORDER</h3>
                 <div class="order-header-ornament">
                     <span class="oh-line"></span>
                     <span class="oh-diamond">◆</span>
@@ -383,9 +506,101 @@
         </div>
     </div>
 
+    <!-- ========== AI SUMMARY MODAL ========== -->
+    <div class="order-overlay hidden" id="summary-overlay">
+        <div class="order-sheet">
+            <div class="order-header">
+                <div class="order-header-ornament">
+                    <span class="oh-line"></span><span class="oh-diamond">◆</span><span class="oh-line"></span>
+                </div>
+                <h3>AI AUDIT SUMMARY</h3>
+                <div class="order-header-ornament">
+                    <span class="oh-line"></span><span class="oh-diamond">◆</span><span class="oh-line"></span>
+                </div>
+                <button class="order-close" onclick="document.getElementById('summary-overlay').classList.add('hidden')">
+                    <i class="fas fa-times"></i>
+                </button>
+            </div>
+            <div class="order-body" id="summary-body">
+                <div class="summary-loading">
+                    <i class="fas fa-feather-alt fa-spin" style="font-size:2rem;color:var(--gold);"></i>
+                    <p>Generating professional summary...</p>
+                </div>
+            </div>
+            <div class="order-footer">
+                <button class="action-btn export-pdf-btn" onclick="exportSummaryPDF()" style="margin:0 auto;">
+                    <i class="fas fa-download"></i> Download Summary
+                </button>
+            </div>
+        </div>
+    </div>
+
     <!-- ========== TOAST CONTAINER ========== -->
     <div id="toast-container" class="toast-container"></div>
 
+    <!-- ========== LEXAI CHATBOT ========== -->
+    <div class="chat-bubble" id="chat-bubble" onclick="toggleChat()">
+        <div class="chat-bubble-icon">⚖️</div>
+        <div class="chat-bubble-label">LexAI</div>
+        <div class="chat-notification" id="chat-notification" style="display:none;">1</div>
+    </div>
+
+    <div class="chat-pane hidden" id="chat-pane">
+        <div class="chat-header">
+            <div class="chat-header-left">
+                <div class="chat-avatar">⚖️</div>
+                <div>
+                    <div class="chat-title">LexAI Legal Assistant</div>
+                    <div class="chat-subtitle">Powered by Groq × Llama 3.3</div>
+                </div>
+            </div>
+            <div class="chat-header-actions">
+                <button title="Use audit context" onclick="toggleAuditContext()" id="ctx-btn" class="chat-action-btn">
+                    <i class="fas fa-link"></i>
+                </button>
+                <button title="Clear chat" onclick="clearChat()" class="chat-action-btn">
+                    <i class="fas fa-trash"></i>
+                </button>
+                <button onclick="toggleChat()" class="chat-action-btn">
+                    <i class="fas fa-times"></i>
+                </button>
+            </div>
+        </div>
+        <div class="chat-context-bar hidden" id="chat-context-bar">
+            <i class="fas fa-link"></i> Audit context attached — LexAI will use your last audit results
+        </div>
+        <div class="chat-messages" id="chat-messages">
+            <div class="chat-msg assistant">
+                <div class="msg-avatar">⚖️</div>
+                <div class="msg-bubble">
+                    <p>Namaste! I'm <strong>LexAI</strong>, your AI legal assistant specializing in Indian law.</p>
+                    <p style="margin-top:0.5rem;">I can help you:</p>
+                    <ul style="margin:0.25rem 0 0 1rem;font-size:0.85rem;">
+                        <li>Explain case law & legal concepts</li>
+                        <li>Analyze your audit results</li>
+                        <li>Research Indian constitutional law</li>
+                        <li>Identify fabricated citations</li>
+                    </ul>
+                    <p style="margin-top:0.5rem;font-size:0.8rem;color:var(--text-secondary);">Run an audit first, then click the 🔗 button to give me context!</p>
+                </div>
+            </div>
+        </div>
+        <div class="chat-suggestions" id="chat-suggestions">
+            <button class="chat-chip" onclick="sendSuggestion('What is a hallucinated citation?')">What is a hallucinated citation?</button>
+            <button class="chat-chip" onclick="sendSuggestion('Explain Article 21 of the Indian Constitution')">Article 21</button>
+            <button class="chat-chip" onclick="sendSuggestion('What does SCC stand for in Indian law?')">What is SCC?</button>
+        </div>
+        <div class="chat-input-area">
+            <textarea id="chat-input" class="chat-input" placeholder="Ask any legal question..." rows="1"
+                onkeypress="handleChatKey(event)" oninput="autoResizeChat(this)"></textarea>
+            <button class="chat-send-btn" id="chat-send-btn" onclick="sendChatMessage()">
+                <i class="fas fa-paper-plane"></i>
+            </button>
+        </div>
+    </div>
+
+    <!-- jsPDF for PDF export -->
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
     <script src="/static/app.js"></script>
 </body>
 </html>
