@@ -20,6 +20,7 @@ This platform has ample tools to deal with variou legal problems with AI integra
 - Semantic search across judgment texts to find supporting or contradicting evidence
 - Detailed verification reports with confidence scores
 
+
 ### Bail Reckoner
 - Risk assessment engine for bail applications
 - Considers factors like offense category, imprisonment served, and flight risk
