@@ -4,6 +4,15 @@ A comprehensive AI-powered platform for legal research and analysis focused on t
 
 **Watch Our Demo:** https://www.youtube.com/watch?v=s5U2C15_Ey0
 
+![alt text](<WhatsApp Image 2026-03-15 at 10.35.51.jpeg>)
+
+![alt text](<WhatsApp Image 2026-03-15 at 10.36.26.jpeg>)
+
+![alt text](<WhatsApp Image 2026-03-15 at 10.47.57.jpeg>)
+
+![alt text](<WhatsApp Image 2026-03-15 at 10.49.12.jpeg>)
+
+![alt text](<WhatsApp Image 2026-03-15 at 10.49.12-1.jpeg>)
 ## Overview
 This platform has ample tools to deal with variou legal problems with AI integrated:
 
