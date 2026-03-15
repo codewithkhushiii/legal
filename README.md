@@ -2,6 +2,9 @@
 
 A comprehensive AI-powered platform for legal research and analysis focused on the Supreme Court of India, featuring citation verification, bail risk assessment, and case data management.
 
+
+
+
 ## Overview
 
 This platform provides legal professionals with advanced AI tools for:
