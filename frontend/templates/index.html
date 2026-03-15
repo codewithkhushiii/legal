@@ -1,0 +1,1769 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>⚖️ AI Legal Intelligence Platform — Supreme Court of India</title>
+    <link href="https://fonts.googleapis.com/css2?family=Playfair+Display:ital,wght@0,400;0,500;0,600;0,700;0,800;0,900;1,400;1,500&family=Cormorant+Garamond:ital,wght@0,300;0,400;0,500;0,600;0,700;1,300;1,400;1,500&family=JetBrains+Mono:wght@300;400;500;600;700&family=Inter:wght@300;400;500;600;700;800&display=swap" rel="stylesheet">
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.0/css/all.min.css">
+    <style>
+        /* ============================================
+           CSS CUSTOM PROPERTIES
+           ============================================ */
+        :root {
+            --bg-deepest: #0a0a0f;
+            --bg-dark: #0d0d14;
+            --bg-panel: #111118;
+            --bg-card: #16161f;
+            --bg-elevated: #1a1a25;
+            --bg-hover: #1e1e2a;
+            --gold: #c9a84c;
+            --gold-light: #e8d48b;
+            --gold-dark: #8b6914;
+            --gold-glow: rgba(201, 168, 76, 0.15);
+            --gold-glow-strong: rgba(201, 168, 76, 0.35);
+            --crimson: #8b2035;
+            --crimson-light: #c4445a;
+            --crimson-glow: rgba(139, 32, 53, 0.2);
+            --emerald: #1a7a4c;
+            --emerald-light: #4caf8a;
+            --emerald-glow: rgba(26, 122, 76, 0.2);
+            --amber: #b8860b;
+            --amber-light: #e8b877;
+            --text-primary: #e8e4dc;
+            --text-secondary: #9a9488;
+            --text-muted: #5a5650;
+            --border-subtle: rgba(201, 168, 76, 0.08);
+            --border-gold: rgba(201, 168, 76, 0.2);
+            --border-strong: rgba(201, 168, 76, 0.35);
+            --font-display: 'Playfair Display', serif;
+            --font-body: 'Cormorant Garamond', serif;
+            --font-ui: 'Inter', sans-serif;
+            --font-mono: 'JetBrains Mono', monospace;
+        }
+
+        /* ============================================
+           RESET & BASE
+           ============================================ */
+        *, *::before, *::after {
+            margin: 0; padding: 0; box-sizing: border-box;
+        }
+
+        html {
+            scroll-behavior: smooth;
+        }
+
+        body {
+            background: var(--bg-deepest);
+            color: var(--text-primary);
+            font-family: var(--font-body);
+            min-height: 100vh;
+            overflow-x: hidden;
+            cursor: default;
+        }
+
+        /* ============================================
+           BOOT SCREEN
+           ============================================ */
+        .boot-screen {
+            position: fixed;
+            inset: 0;
+            z-index: 10000;
+            background: var(--bg-deepest);
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            flex-direction: column;
+            transition: opacity 0.8s ease, transform 0.8s ease;
+        }
+
+        .boot-screen.dismissed {
+            opacity: 0;
+            transform: scale(1.05);
+            pointer-events: none;
+        }
+
+        .boot-emblem {
+            position: relative;
+            width: 120px;
+            height: 120px;
+            margin-bottom: 2rem;
+        }
+
+        .boot-emblem-ring {
+            position: absolute;
+            inset: 0;
+            border: 2px solid var(--gold);
+            border-radius: 50%;
+            animation: bootRingSpin 3s linear infinite;
+        }
+
+        .boot-emblem-ring:nth-child(2) {
+            inset: 10px;
+            border-color: rgba(201, 168, 76, 0.4);
+            animation-direction: reverse;
+            animation-duration: 4s;
+        }
+
+        .boot-emblem-ring:nth-child(3) {
+            inset: 20px;
+            border-color: rgba(201, 168, 76, 0.2);
+            animation-duration: 5s;
+        }
+
+        .boot-emblem-icon {
+            position: absolute;
+            inset: 0;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-size: 2.5rem;
+            animation: bootPulse 2s ease-in-out infinite;
+        }
+
+        @keyframes bootRingSpin {
+            to { transform: rotate(360deg); }
+        }
+
+        @keyframes bootPulse {
+            0%, 100% { transform: scale(1); }
+            50% { transform: scale(1.1); }
+        }
+
+        .boot-title {
+            font-family: var(--font-display);
+            font-size: 1.4rem;
+            color: var(--gold);
+            letter-spacing: 6px;
+            text-transform: uppercase;
+            margin-bottom: 0.5rem;
+            text-align: center;
+        }
+
+        .boot-subtitle {
+            font-family: var(--font-ui);
+            font-size: 0.75rem;
+            color: var(--text-secondary);
+            letter-spacing: 3px;
+            text-transform: uppercase;
+            margin-bottom: 2rem;
+        }
+
+        .boot-progress {
+            width: 280px;
+            height: 3px;
+            background: var(--bg-card);
+            border-radius: 3px;
+            overflow: hidden;
+            margin-bottom: 1.5rem;
+        }
+
+        .boot-progress-fill {
+            height: 100%;
+            width: 0%;
+            background: linear-gradient(90deg, var(--gold-dark), var(--gold), var(--gold-light));
+            border-radius: 3px;
+            animation: bootLoad 3s ease-in-out forwards;
+        }
+
+        @keyframes bootLoad {
+            0% { width: 0%; }
+            30% { width: 40%; }
+            60% { width: 70%; }
+            100% { width: 100%; }
+        }
+
+        .boot-steps {
+            display: flex;
+            flex-direction: column;
+            gap: 0.4rem;
+            align-items: center;
+        }
+
+        .boot-step {
+            font-family: var(--font-mono);
+            font-size: 0.65rem;
+            color: var(--text-muted);
+            letter-spacing: 1px;
+            opacity: 0;
+            transform: translateY(10px);
+            animation: bootStepIn 0.4s ease forwards;
+        }
+
+        .boot-step .check {
+            color: var(--emerald-light);
+            margin-left: 0.5rem;
+        }
+
+        @keyframes bootStepIn {
+            to { opacity: 1; transform: translateY(0); }
+        }
+
+        .boot-motto {
+            margin-top: 2rem;
+            font-family: var(--font-body);
+            font-size: 0.85rem;
+            color: var(--text-muted);
+            font-style: italic;
+        }
+
+        /* ============================================
+           ANIMATED BACKGROUND
+           ============================================ */
+        .bg-canvas {
+            position: fixed;
+            inset: 0;
+            z-index: 0;
+            overflow: hidden;
+            pointer-events: none;
+        }
+
+        .bg-gradient-orb {
+            position: absolute;
+            border-radius: 50%;
+            filter: blur(120px);
+            opacity: 0.04;
+        }
+
+        .bg-gradient-orb.orb-1 {
+            width: 800px; height: 800px;
+            background: radial-gradient(circle, var(--gold) 0%, transparent 70%);
+            top: -200px; left: -200px;
+            animation: orbFloat1 20s ease-in-out infinite;
+        }
+
+        .bg-gradient-orb.orb-2 {
+            width: 600px; height: 600px;
+            background: radial-gradient(circle, var(--crimson) 0%, transparent 70%);
+            bottom: -100px; right: -150px;
+            animation: orbFloat2 25s ease-in-out infinite;
+        }
+
+        .bg-gradient-orb.orb-3 {
+            width: 500px; height: 500px;
+            background: radial-gradient(circle, var(--emerald) 0%, transparent 70%);
+            top: 50%; left: 50%;
+            transform: translate(-50%, -50%);
+            animation: orbFloat3 18s ease-in-out infinite;
+        }
+
+        @keyframes orbFloat1 {
+            0%, 100% { transform: translate(0, 0); }
+            33% { transform: translate(100px, 80px); }
+            66% { transform: translate(-50px, 120px); }
+        }
+
+        @keyframes orbFloat2 {
+            0%, 100% { transform: translate(0, 0); }
+            33% { transform: translate(-80px, -60px); }
+            66% { transform: translate(60px, -100px); }
+        }
+
+        @keyframes orbFloat3 {
+            0%, 100% { transform: translate(-50%, -50%) scale(1); }
+            50% { transform: translate(-50%, -50%) scale(1.3); }
+        }
+
+        /* Grid lines */
+        .bg-grid {
+            position: fixed;
+            inset: 0;
+            z-index: 0;
+            background-image:
+                linear-gradient(rgba(201, 168, 76, 0.02) 1px, transparent 1px),
+                linear-gradient(90deg, rgba(201, 168, 76, 0.02) 1px, transparent 1px);
+            background-size: 80px 80px;
+            pointer-events: none;
+        }
+
+        /* Floating particles */
+        .particle-field {
+            position: fixed;
+            inset: 0;
+            z-index: 0;
+            pointer-events: none;
+            overflow: hidden;
+        }
+
+        .particle {
+            position: absolute;
+            width: 2px;
+            height: 2px;
+            background: var(--gold);
+            border-radius: 50%;
+            opacity: 0;
+            animation: particleDrift linear infinite;
+        }
+
+        @keyframes particleDrift {
+            0% { opacity: 0; transform: translateY(100vh) scale(0); }
+            10% { opacity: 0.6; }
+            90% { opacity: 0.6; }
+            100% { opacity: 0; transform: translateY(-10vh) scale(1); }
+        }
+
+        /* ============================================
+           MAIN LAYOUT
+           ============================================ */
+        .platform {
+            position: relative;
+            z-index: 1;
+            min-height: 100vh;
+            display: flex;
+            flex-direction: column;
+            opacity: 0;
+            transition: opacity 0.6s ease;
+        }
+
+        .platform.visible {
+            opacity: 1;
+        }
+
+        /* ============================================
+           HEADER
+           ============================================ */
+        .header {
+            position: sticky;
+            top: 0;
+            z-index: 100;
+            background: rgba(10, 10, 15, 0.85);
+            backdrop-filter: blur(30px);
+            -webkit-backdrop-filter: blur(30px);
+            border-bottom: 1px solid var(--border-subtle);
+            padding: 0 2rem;
+        }
+
+        .header-inner {
+            max-width: 1400px;
+            margin: 0 auto;
+            height: 70px;
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+        }
+
+        .header-brand {
+            display: flex;
+            align-items: center;
+            gap: 1rem;
+        }
+
+        .brand-emblem {
+            width: 42px;
+            height: 42px;
+            border: 1.5px solid var(--gold);
+            border-radius: 50%;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-size: 1.2rem;
+            position: relative;
+        }
+
+        .brand-emblem::before {
+            content: '';
+            position: absolute;
+            inset: -4px;
+            border: 1px solid rgba(201, 168, 76, 0.2);
+            border-radius: 50%;
+        }
+
+        .brand-text h1 {
+            font-family: var(--font-display);
+            font-size: 1.05rem;
+            font-weight: 700;
+            color: var(--gold);
+            letter-spacing: 3px;
+            text-transform: uppercase;
+            line-height: 1.2;
+        }
+
+        .brand-text p {
+            font-family: var(--font-ui);
+            font-size: 0.6rem;
+            color: var(--text-muted);
+            letter-spacing: 2px;
+            text-transform: uppercase;
+        }
+
+        .header-nav {
+            display: flex;
+            align-items: center;
+            gap: 2rem;
+        }
+
+        .nav-indicators {
+            display: flex;
+            gap: 1rem;
+        }
+
+        .nav-indicator {
+            display: flex;
+            align-items: center;
+            gap: 0.4rem;
+            font-family: var(--font-mono);
+            font-size: 0.6rem;
+            color: var(--text-muted);
+            letter-spacing: 1px;
+            text-transform: uppercase;
+        }
+
+        .indicator-dot {
+            width: 6px;
+            height: 6px;
+            border-radius: 50%;
+            background: var(--emerald-light);
+            box-shadow: 0 0 8px var(--emerald-light);
+            animation: indicatorPulse 2s ease-in-out infinite;
+        }
+
+        @keyframes indicatorPulse {
+            0%, 100% { opacity: 1; }
+            50% { opacity: 0.4; }
+        }
+
+        .header-clock {
+            font-family: var(--font-mono);
+            font-size: 0.7rem;
+            color: var(--text-secondary);
+            letter-spacing: 1px;
+            padding: 0.35rem 0.8rem;
+            border: 1px solid var(--border-subtle);
+            border-radius: 4px;
+        }
+
+        /* ============================================
+           HERO SECTION
+           ============================================ */
+        .hero {
+            position: relative;
+            padding: 6rem 2rem 4rem;
+            text-align: center;
+            overflow: hidden;
+        }
+
+        .hero-ornament-top {
+            position: absolute;
+            top: 0;
+            left: 50%;
+            transform: translateX(-50%);
+            width: 200px;
+            height: 1px;
+            background: linear-gradient(90deg, transparent, var(--gold), transparent);
+        }
+
+        .hero-scales {
+            position: relative;
+            width: 200px;
+            height: 160px;
+            margin: 0 auto 3rem;
+        }
+
+        .scales-pillar {
+            position: absolute;
+            left: 50%;
+            bottom: 0;
+            width: 4px;
+            height: 80px;
+            background: linear-gradient(to top, var(--gold-dark), var(--gold));
+            transform: translateX(-50%);
+            border-radius: 2px;
+        }
+
+        .scales-pillar::before {
+            content: '';
+            position: absolute;
+            bottom: -8px;
+            left: 50%;
+            transform: translateX(-50%);
+            width: 40px;
+            height: 8px;
+            background: var(--gold-dark);
+            border-radius: 2px;
+        }
+
+        .scales-beam-container {
+            position: absolute;
+            top: 0;
+            left: 50%;
+            transform: translateX(-50%);
+            width: 200px;
+            height: 80px;
+            animation: scalesBalance 6s ease-in-out infinite;
+            transform-origin: top center;
+        }
+
+        .scales-h-beam {
+            position: absolute;
+            top: 0;
+            left: 0;
+            right: 0;
+            height: 3px;
+            background: linear-gradient(90deg, var(--gold-dark), var(--gold), var(--gold-dark));
+            border-radius: 2px;
+        }
+
+        .scales-pivot-gem {
+            position: absolute;
+            top: -6px;
+            left: 50%;
+            transform: translateX(-50%);
+            width: 14px;
+            height: 14px;
+            background: var(--gold);
+            border-radius: 50%;
+            box-shadow: 0 0 20px var(--gold-glow-strong);
+        }
+
+        .scales-chain {
+            position: absolute;
+            top: 3px;
+            width: 1px;
+            height: 35px;
+            background: linear-gradient(to bottom, var(--gold), var(--gold-dark));
+        }
+
+        .scales-chain.left { left: 15px; }
+        .scales-chain.right { right: 15px; }
+
+        .scales-pan-group {
+            position: absolute;
+            top: 38px;
+            width: 50px;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+        }
+
+        .scales-pan-group.left { left: -10px; }
+        .scales-pan-group.right { right: -10px; }
+
+        .scales-pan-dish {
+            width: 50px;
+            height: 8px;
+            border-radius: 0 0 25px 25px;
+            background: linear-gradient(to bottom, var(--gold), var(--gold-dark));
+            box-shadow: 0 3px 12px rgba(201, 168, 76, 0.2);
+        }
+
+        .scales-pan-label {
+            font-family: var(--font-mono);
+            font-size: 0.45rem;
+            letter-spacing: 2px;
+            color: var(--text-muted);
+            margin-top: 6px;
+            text-transform: uppercase;
+        }
+
+        @keyframes scalesBalance {
+            0%, 100% { transform: translateX(-50%) rotate(0deg); }
+            25% { transform: translateX(-50%) rotate(2deg); }
+            75% { transform: translateX(-50%) rotate(-2deg); }
+        }
+
+        .hero-title {
+            font-family: var(--font-display);
+            font-size: 3.2rem;
+            font-weight: 800;
+            color: var(--text-primary);
+            line-height: 1.15;
+            margin-bottom: 1rem;
+            letter-spacing: 1px;
+        }
+
+        .hero-title .gold {
+            color: var(--gold);
+            position: relative;
+        }
+
+        .hero-title .gold::after {
+            content: '';
+            position: absolute;
+            bottom: -2px;
+            left: 0;
+            right: 0;
+            height: 2px;
+            background: linear-gradient(90deg, transparent, var(--gold), transparent);
+        }
+
+        .hero-subtitle {
+            font-family: var(--font-body);
+            font-size: 1.3rem;
+            color: var(--text-secondary);
+            max-width: 700px;
+            margin: 0 auto 1.5rem;
+            line-height: 1.6;
+            font-weight: 400;
+        }
+
+        .hero-divider {
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            gap: 1rem;
+            margin: 2rem auto;
+        }
+
+        .hero-divider-line {
+            width: 80px;
+            height: 1px;
+            background: linear-gradient(90deg, transparent, var(--border-gold));
+        }
+
+        .hero-divider-line.right {
+            background: linear-gradient(90deg, var(--border-gold), transparent);
+        }
+
+        .hero-divider-diamond {
+            color: var(--gold);
+            font-size: 0.7rem;
+        }
+
+        .hero-tech-badges {
+            display: flex;
+            justify-content: center;
+            gap: 0.8rem;
+            flex-wrap: wrap;
+            margin-bottom: 2rem;
+        }
+
+        .tech-badge {
+            font-family: var(--font-mono);
+            font-size: 0.6rem;
+            letter-spacing: 1.5px;
+            text-transform: uppercase;
+            padding: 0.35rem 0.8rem;
+            border: 1px solid var(--border-subtle);
+            border-radius: 3px;
+            color: var(--text-muted);
+            background: rgba(201, 168, 76, 0.03);
+        }
+
+        .hero-motto {
+            font-family: var(--font-body);
+            font-size: 1rem;
+            color: var(--text-muted);
+            font-style: italic;
+            margin-top: 1rem;
+        }
+
+        /* ============================================
+           CARDS SECTION
+           ============================================ */
+        .cards-section {
+            padding: 2rem 2rem 6rem;
+            max-width: 1200px;
+            margin: 0 auto;
+        }
+
+        .section-label {
+            text-align: center;
+            margin-bottom: 3rem;
+        }
+
+        .section-label-text {
+            font-family: var(--font-mono);
+            font-size: 0.65rem;
+            letter-spacing: 4px;
+            text-transform: uppercase;
+            color: var(--gold);
+            padding: 0.4rem 1.2rem;
+            border: 1px solid var(--border-gold);
+            border-radius: 2px;
+            display: inline-block;
+        }
+
+        .cards-grid {
+            display: grid;
+            grid-template-columns: 1fr 1fr;
+            gap: 2.5rem;
+        }
+
+        /* ============================================
+           TOOL CARD
+           ============================================ */
+        .tool-card {
+            position: relative;
+            background: var(--bg-panel);
+            border: 1px solid var(--border-subtle);
+            border-radius: 16px;
+            overflow: hidden;
+            cursor: pointer;
+            transition: all 0.5s cubic-bezier(0.23, 1, 0.32, 1);
+            text-decoration: none;
+            color: inherit;
+            display: block;
+        }
+
+        .tool-card:hover {
+            border-color: var(--border-gold);
+            transform: translateY(-8px);
+            box-shadow:
+                0 20px 60px rgba(0, 0, 0, 0.4),
+                0 0 80px var(--gold-glow),
+                inset 0 1px 0 rgba(201, 168, 76, 0.1);
+        }
+
+        .tool-card::before {
+            content: '';
+            position: absolute;
+            inset: 0;
+            background: linear-gradient(135deg, var(--gold-glow) 0%, transparent 50%);
+            opacity: 0;
+            transition: opacity 0.5s ease;
+            z-index: 0;
+        }
+
+        .tool-card:hover::before {
+            opacity: 1;
+        }
+
+        /* Shimmer effect on hover */
+        .tool-card::after {
+            content: '';
+            position: absolute;
+            top: 0;
+            left: -100%;
+            width: 100%;
+            height: 100%;
+            background: linear-gradient(
+                90deg,
+                transparent,
+                rgba(201, 168, 76, 0.05),
+                transparent
+            );
+            transition: none;
+            z-index: 0;
+        }
+
+        .tool-card:hover::after {
+            animation: cardShimmer 1.5s ease forwards;
+        }
+
+        @keyframes cardShimmer {
+            to { left: 100%; }
+        }
+
+        .card-glow-border {
+            position: absolute;
+            inset: -1px;
+            border-radius: 17px;
+            padding: 1px;
+            background: linear-gradient(135deg, var(--gold), transparent 40%, transparent 60%, var(--gold-dark));
+            -webkit-mask: linear-gradient(#fff 0 0) content-box, linear-gradient(#fff 0 0);
+            mask: linear-gradient(#fff 0 0) content-box, linear-gradient(#fff 0 0);
+            -webkit-mask-composite: xor;
+            mask-composite: exclude;
+            opacity: 0;
+            transition: opacity 0.5s ease;
+            z-index: 0;
+        }
+
+        .tool-card:hover .card-glow-border {
+            opacity: 1;
+        }
+
+        .card-header {
+            position: relative;
+            z-index: 1;
+            padding: 2.5rem 2.5rem 0;
+        }
+
+        .card-icon-area {
+            position: relative;
+            width: 80px;
+            height: 80px;
+            margin-bottom: 1.5rem;
+        }
+
+        .card-icon-ring {
+            position: absolute;
+            inset: 0;
+            border: 1.5px solid var(--border-gold);
+            border-radius: 50%;
+            transition: all 0.5s ease;
+        }
+
+        .tool-card:hover .card-icon-ring {
+            border-color: var(--gold);
+            box-shadow: 0 0 30px var(--gold-glow);
+            transform: scale(1.05);
+        }
+
+        .card-icon-ring::before {
+            content: '';
+            position: absolute;
+            inset: 6px;
+            border: 1px solid rgba(201, 168, 76, 0.15);
+            border-radius: 50%;
+        }
+
+        .card-icon-symbol {
+            position: absolute;
+            inset: 0;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-size: 2rem;
+            transition: transform 0.5s ease;
+        }
+
+        .tool-card:hover .card-icon-symbol {
+            transform: scale(1.15) rotate(5deg);
+        }
+
+        .card-number {
+            font-family: var(--font-mono);
+            font-size: 0.55rem;
+            letter-spacing: 3px;
+            color: var(--text-muted);
+            text-transform: uppercase;
+            margin-bottom: 0.75rem;
+        }
+
+        .card-title {
+            font-family: var(--font-display);
+            font-size: 1.8rem;
+            font-weight: 700;
+            color: var(--text-primary);
+            margin-bottom: 0.75rem;
+            line-height: 1.2;
+            transition: color 0.3s ease;
+        }
+
+        .tool-card:hover .card-title {
+            color: var(--gold);
+        }
+
+        .card-subtitle {
+            font-family: var(--font-ui);
+            font-size: 0.8rem;
+            color: var(--text-secondary);
+            line-height: 1.7;
+            margin-bottom: 1.5rem;
+        }
+
+        .card-body {
+            position: relative;
+            z-index: 1;
+            padding: 0 2.5rem;
+        }
+
+        .card-features {
+            display: flex;
+            flex-direction: column;
+            gap: 0.6rem;
+            margin-bottom: 1.5rem;
+        }
+
+        .card-feature {
+            display: flex;
+            align-items: center;
+            gap: 0.7rem;
+            font-family: var(--font-ui);
+            font-size: 0.75rem;
+            color: var(--text-secondary);
+        }
+
+        .card-feature i {
+            color: var(--gold);
+            font-size: 0.6rem;
+            width: 16px;
+            text-align: center;
+        }
+
+        .card-stats {
+            display: grid;
+            grid-template-columns: repeat(3, 1fr);
+            gap: 1rem;
+            padding: 1.2rem 0;
+            border-top: 1px solid var(--border-subtle);
+            margin-bottom: 1.5rem;
+        }
+
+        .card-stat {
+            text-align: center;
+        }
+
+        .card-stat-number {
+            font-family: var(--font-display);
+            font-size: 1.4rem;
+            font-weight: 700;
+            color: var(--gold);
+            line-height: 1.2;
+        }
+
+        .card-stat-label {
+            font-family: var(--font-mono);
+            font-size: 0.5rem;
+            letter-spacing: 1.5px;
+            color: var(--text-muted);
+            text-transform: uppercase;
+            margin-top: 0.2rem;
+        }
+
+        .card-footer {
+            position: relative;
+            z-index: 1;
+            padding: 1.5rem 2.5rem 2.5rem;
+        }
+
+        .card-cta {
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            padding: 1rem 1.5rem;
+            background: rgba(201, 168, 76, 0.05);
+            border: 1px solid var(--border-gold);
+            border-radius: 8px;
+            transition: all 0.4s ease;
+        }
+
+        .tool-card:hover .card-cta {
+            background: rgba(201, 168, 76, 0.1);
+            border-color: var(--gold);
+            box-shadow: 0 0 30px var(--gold-glow);
+        }
+
+        .cta-text {
+            font-family: var(--font-display);
+            font-size: 0.9rem;
+            font-weight: 600;
+            color: var(--gold);
+            letter-spacing: 2px;
+            text-transform: uppercase;
+        }
+
+        .cta-arrow {
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            width: 36px;
+            height: 36px;
+            border-radius: 50%;
+            background: var(--gold);
+            color: var(--bg-deepest);
+            font-size: 0.85rem;
+            transition: all 0.4s ease;
+        }
+
+        .tool-card:hover .cta-arrow {
+            transform: translateX(4px);
+            box-shadow: 0 0 20px var(--gold-glow-strong);
+        }
+
+        /* Card-specific accent colors */
+        .tool-card.citation-card:hover {
+            border-color: rgba(201, 168, 76, 0.4);
+        }
+
+        .tool-card.bail-card:hover {
+            border-color: rgba(76, 175, 138, 0.4);
+        }
+
+        .tool-card.bail-card .card-icon-ring {
+            border-color: rgba(76, 175, 138, 0.2);
+        }
+
+        .tool-card.bail-card:hover .card-icon-ring {
+            border-color: var(--emerald-light);
+            box-shadow: 0 0 30px var(--emerald-glow);
+        }
+
+        .tool-card.bail-card:hover .card-title {
+            color: var(--emerald-light);
+        }
+
+        .tool-card.bail-card .card-stat-number {
+            color: var(--emerald-light);
+        }
+
+        .tool-card.bail-card .card-feature i {
+            color: var(--emerald-light);
+        }
+
+        .tool-card.bail-card .cta-text {
+            color: var(--emerald-light);
+        }
+
+        .tool-card.bail-card .cta-arrow {
+            background: var(--emerald-light);
+        }
+
+        .tool-card.bail-card:hover .card-cta {
+            background: rgba(76, 175, 138, 0.08);
+            border-color: var(--emerald-light);
+            box-shadow: 0 0 30px var(--emerald-glow);
+        }
+
+        .tool-card.bail-card::before {
+            background: linear-gradient(135deg, var(--emerald-glow) 0%, transparent 50%);
+        }
+
+        .tool-card.bail-card .card-glow-border {
+            background: linear-gradient(135deg, var(--emerald-light), transparent 40%, transparent 60%, var(--emerald));
+        }
+
+        /* ============================================
+           CAPABILITIES RIBBON
+           ============================================ */
+        .capabilities-ribbon {
+            padding: 3rem 2rem;
+            border-top: 1px solid var(--border-subtle);
+            border-bottom: 1px solid var(--border-subtle);
+            background: rgba(201, 168, 76, 0.015);
+        }
+
+        .ribbon-inner {
+            max-width: 1200px;
+            margin: 0 auto;
+        }
+
+        .ribbon-title {
+            text-align: center;
+            font-family: var(--font-mono);
+            font-size: 0.6rem;
+            letter-spacing: 4px;
+            color: var(--text-muted);
+            text-transform: uppercase;
+            margin-bottom: 2rem;
+        }
+
+        .ribbon-grid {
+            display: grid;
+            grid-template-columns: repeat(4, 1fr);
+            gap: 1.5rem;
+        }
+
+        .ribbon-item {
+            text-align: center;
+            padding: 1.5rem 1rem;
+            border: 1px solid var(--border-subtle);
+            border-radius: 8px;
+            background: var(--bg-panel);
+            transition: all 0.3s ease;
+        }
+
+        .ribbon-item:hover {
+            border-color: var(--border-gold);
+            background: var(--bg-card);
+            transform: translateY(-2px);
+        }
+
+        .ribbon-icon {
+            font-size: 1.5rem;
+            margin-bottom: 0.75rem;
+        }
+
+        .ribbon-item-title {
+            font-family: var(--font-ui);
+            font-size: 0.75rem;
+            font-weight: 600;
+            color: var(--text-primary);
+            margin-bottom: 0.4rem;
+        }
+
+        .ribbon-item-desc {
+            font-family: var(--font-ui);
+            font-size: 0.65rem;
+            color: var(--text-muted);
+            line-height: 1.5;
+        }
+
+        /* ============================================
+           FOOTER
+           ============================================ */
+        .footer {
+            padding: 2rem;
+            text-align: center;
+            border-top: 1px solid var(--border-subtle);
+        }
+
+        .footer-ornament {
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            gap: 1rem;
+            margin-bottom: 1rem;
+        }
+
+        .footer-ornament-line {
+            width: 60px;
+            height: 1px;
+            background: linear-gradient(90deg, transparent, var(--border-gold));
+        }
+
+        .footer-ornament-line.right {
+            background: linear-gradient(90deg, var(--border-gold), transparent);
+        }
+
+        .footer-motto {
+            font-family: var(--font-body);
+            font-size: 1rem;
+            color: var(--text-secondary);
+            margin-bottom: 0.3rem;
+        }
+
+        .footer-motto-en {
+            font-family: var(--font-ui);
+            font-size: 0.65rem;
+            color: var(--text-muted);
+            letter-spacing: 2px;
+            text-transform: uppercase;
+        }
+
+        .footer-powered {
+            margin-top: 1.5rem;
+            font-family: var(--font-mono);
+            font-size: 0.55rem;
+            color: var(--text-muted);
+            letter-spacing: 1.5px;
+        }
+
+        /* ============================================
+           MOUSE GLOW FOLLOWER
+           ============================================ */
+        .mouse-glow {
+            position: fixed;
+            width: 400px;
+            height: 400px;
+            border-radius: 50%;
+            background: radial-gradient(circle, rgba(201, 168, 76, 0.06) 0%, transparent 70%);
+            pointer-events: none;
+            z-index: 0;
+            transition: transform 0.15s ease;
+            transform: translate(-50%, -50%);
+        }
+
+        /* ============================================
+           RESPONSIVE
+           ============================================ */
+        @media (max-width: 900px) {
+            .cards-grid {
+                grid-template-columns: 1fr;
+                gap: 2rem;
+            }
+
+            .hero-title {
+                font-size: 2.2rem;
+            }
+
+            .hero-subtitle {
+                font-size: 1.1rem;
+            }
+
+            .ribbon-grid {
+                grid-template-columns: repeat(2, 1fr);
+            }
+
+            .header-nav {
+                gap: 1rem;
+            }
+
+            .nav-indicators {
+                display: none;
+            }
+        }
+
+        @media (max-width: 600px) {
+            .hero {
+                padding: 4rem 1.5rem 3rem;
+            }
+
+            .hero-title {
+                font-size: 1.8rem;
+            }
+
+            .card-header, .card-body, .card-footer {
+                padding-left: 1.5rem;
+                padding-right: 1.5rem;
+            }
+
+            .card-stats {
+                grid-template-columns: repeat(2, 1fr);
+            }
+
+            .ribbon-grid {
+                grid-template-columns: 1fr;
+            }
+
+            .header-inner {
+                padding: 0 1rem;
+            }
+        }
+
+        /* ============================================
+           SCROLL REVEAL ANIMATIONS
+           ============================================ */
+        .reveal {
+            opacity: 0;
+            transform: translateY(40px);
+            transition: all 0.8s cubic-bezier(0.23, 1, 0.32, 1);
+        }
+
+        .reveal.visible {
+            opacity: 1;
+            transform: translateY(0);
+        }
+
+        .reveal-delay-1 { transition-delay: 0.15s; }
+        .reveal-delay-2 { transition-delay: 0.3s; }
+        .reveal-delay-3 { transition-delay: 0.45s; }
+        .reveal-delay-4 { transition-delay: 0.6s; }
+
+        /* ============================================
+           TYPING ANIMATION FOR HERO
+           ============================================ */
+        .typing-cursor {
+            display: inline-block;
+            width: 2px;
+            height: 1em;
+            background: var(--gold);
+            margin-left: 4px;
+            animation: cursorBlink 1s step-end infinite;
+            vertical-align: text-bottom;
+        }
+
+        @keyframes cursorBlink {
+            0%, 50% { opacity: 1; }
+            51%, 100% { opacity: 0; }
+        }
+
+        /* Spinning courthouse for card decoration */
+        .card-bg-pattern {
+            position: absolute;
+            top: 0;
+            right: 0;
+            width: 200px;
+            height: 200px;
+            opacity: 0.03;
+            z-index: 0;
+            transition: opacity 0.5s ease;
+        }
+
+        .tool-card:hover .card-bg-pattern {
+            opacity: 0.06;
+        }
+
+        .card-bg-pattern svg {
+            width: 100%;
+            height: 100%;
+        }
+
+        /* Status bar animation */
+        .live-counter {
+            display: inline-block;
+            font-family: var(--font-mono);
+            color: var(--gold);
+            font-variant-numeric: tabular-nums;
+        }
+    </style>
+</head>
+<body>
+
+    <!-- ========== BOOT SCREEN ========== -->
+    <div class="boot-screen" id="boot-screen">
+        <div class="boot-emblem">
+            <div class="boot-emblem-ring"></div>
+            <div class="boot-emblem-ring"></div>
+            <div class="boot-emblem-ring"></div>
+            <div class="boot-emblem-icon">⚖️</div>
+        </div>
+        <div class="boot-title">Supreme Court of India</div>
+        <div class="boot-subtitle">AI Legal Intelligence Platform</div>
+        <div class="boot-progress">
+            <div class="boot-progress-fill"></div>
+        </div>
+        <div class="boot-steps">
+            <div class="boot-step" style="animation-delay: 0.3s">§ Initializing Neural Legal Engine... <span class="check">✓</span></div>
+            <div class="boot-step" style="animation-delay: 0.8s">§ Loading Case Archive & Bail Reckoner... <span class="check">✓</span></div>
+            <div class="boot-step" style="animation-delay: 1.3s">§ Connecting to Groq LLM × MiniLM-L6 RAG... <span class="check">✓</span></div>
+            <div class="boot-step" style="animation-delay: 1.8s">§ Engaging Hallucination Detection Protocol... <span class="check">✓</span></div>
+            <div class="boot-step" style="animation-delay: 2.3s">§ Upholding the Rule of Law... <span class="check">✓</span></div>
+        </div>
+        <div class="boot-motto">"Yato Dharmastato Jayah"</div>
+    </div>
+
+    <!-- ========== ANIMATED BACKGROUND ========== -->
+    <div class="bg-canvas">
+        <div class="bg-gradient-orb orb-1"></div>
+        <div class="bg-gradient-orb orb-2"></div>
+        <div class="bg-gradient-orb orb-3"></div>
+    </div>
+    <div class="bg-grid"></div>
+    <div class="particle-field" id="particle-field"></div>
+    <div class="mouse-glow" id="mouse-glow"></div>
+
+    <!-- ========== MAIN PLATFORM ========== -->
+    <div class="platform" id="platform">
+
+        <!-- HEADER -->
+        <header class="header">
+            <div class="header-inner">
+                <div class="header-brand">
+                    <div class="brand-emblem">⚖️</div>
+                    <div class="brand-text">
+                        <h1>Legal AI Platform</h1>
+                        <p>Supreme Court of India</p>
+                    </div>
+                </div>
+                <div class="header-nav">
+                    <div class="nav-indicators">
+                        <div class="nav-indicator">
+                            <div class="indicator-dot"></div>
+                            <span>Groq API</span>
+                        </div>
+                        <div class="nav-indicator">
+                            <div class="indicator-dot"></div>
+                            <span>LLM Active</span>
+                        </div>
+                        <div class="nav-indicator">
+                            <div class="indicator-dot"></div>
+                            <span>RAG Engine</span>
+                        </div>
+                    </div>
+                    <div class="header-clock" id="header-clock">—</div>
+                </div>
+            </div>
+        </header>
+
+        <!-- HERO -->
+        <section class="hero">
+            <div class="hero-ornament-top"></div>
+
+            <div class="hero-scales">
+                <div class="scales-pillar"></div>
+                <div class="scales-beam-container">
+                    <div class="scales-h-beam"></div>
+                    <div class="scales-pivot-gem"></div>
+                    <div class="scales-chain left"></div>
+                    <div class="scales-chain right"></div>
+                    <div class="scales-pan-group left">
+                        <div class="scales-pan-dish"></div>
+                        <div class="scales-pan-label">Truth</div>
+                    </div>
+                    <div class="scales-pan-group right">
+                        <div class="scales-pan-dish"></div>
+                        <div class="scales-pan-label">Justice</div>
+                    </div>
+                </div>
+            </div>
+
+            <h2 class="hero-title reveal">
+                Artificial Intelligence for<br>
+                <span class="gold">Indian Legal Practice</span>
+            </h2>
+
+            <p class="hero-subtitle reveal reveal-delay-1">
+                Harness the power of AI to verify citations, detect fabricated precedents, 
+                verify judicial quotes, and calculate bail eligibility — all powered by 
+                cutting-edge language models and retrieval-augmented generation.
+            </p>
+
+            <div class="hero-divider reveal reveal-delay-2">
+                <div class="hero-divider-line"></div>
+                <div class="hero-divider-diamond">◆</div>
+                <div class="hero-divider-line right"></div>
+            </div>
+
+            <div class="hero-tech-badges reveal reveal-delay-2">
+                <span class="tech-badge">Groq Inference</span>
+                <span class="tech-badge">Llama 3.3 70B</span>
+                <span class="tech-badge">MiniLM-L6 RAG</span>
+                <span class="tech-badge">Hallucination Detection</span>
+                <span class="tech-badge">Quote Verification</span>
+            </div>
+
+            <div class="hero-motto reveal reveal-delay-3">
+                "यतो धर्मस्ततो जयः" — Where there is Righteousness, there is Victory
+            </div>
+        </section>
+
+        <!-- TOOL CARDS -->
+        <section class="cards-section">
+            <div class="section-label reveal">
+                <span class="section-label-text">§ Select Your Chamber §</span>
+            </div>
+
+            <div class="cards-grid">
+                <!-- CITATION AUDITOR CARD -->
+                <a href="/auditor" class="tool-card citation-card reveal reveal-delay-1" id="card-citation">
+                    <div class="card-glow-border"></div>
+                    <div class="card-bg-pattern">
+                        <svg viewBox="0 0 200 200" fill="none" xmlns="http://www.w3.org/2000/svg">
+                            <circle cx="100" cy="100" r="80" stroke="currentColor" stroke-width="0.5"/>
+                            <circle cx="100" cy="100" r="60" stroke="currentColor" stroke-width="0.5"/>
+                            <circle cx="100" cy="100" r="40" stroke="currentColor" stroke-width="0.5"/>
+                            <line x1="100" y1="20" x2="100" y2="180" stroke="currentColor" stroke-width="0.3"/>
+                            <line x1="20" y1="100" x2="180" y2="100" stroke="currentColor" stroke-width="0.3"/>
+                        </svg>
+                    </div>
+                    <div class="card-header">
+                        <div class="card-icon-area">
+                            <div class="card-icon-ring"></div>
+                            <div class="card-icon-symbol">🔍</div>
+                        </div>
+                        <div class="card-number">Module I — Verification Engine</div>
+                        <h3 class="card-title">Citation Auditor</h3>
+                        <p class="card-subtitle">
+                            Upload any legal document and our AI will extract every cited case, 
+                            verify it against the Supreme Court archive, and use RAG to check 
+                            if attributed quotes are accurate — catching hallucinated citations 
+                            before they reach the bench.
+                        </p>
+                    </div>
+                    <div class="card-body">
+                        <div class="card-features">
+                            <div class="card-feature">
+                                <i class="fas fa-check"></i>
+                                <span>AI-powered citation extraction from PDFs</span>
+                            </div>
+                            <div class="card-feature">
+                                <i class="fas fa-check"></i>
+                                <span>Cross-reference against SC case archive</span>
+                            </div>
+                            <div class="card-feature">
+                                <i class="fas fa-check"></i>
+                                <span>RAG quote verification with source judgments</span>
+                            </div>
+                            <div class="card-feature">
+                                <i class="fas fa-check"></i>
+                                <span>Hallucination detection & confidence scoring</span>
+                            </div>
+                            <div class="card-feature">
+                                <i class="fas fa-check"></i>
+                                <span>Bulk document audit & export reports</span>
+                            </div>
+                        </div>
+                        <div class="card-stats">
+                            <div class="card-stat">
+                                <div class="card-stat-number" id="stat-cases">—</div>
+                                <div class="card-stat-label">Cases in Registry</div>
+                            </div>
+                            <div class="card-stat">
+                                <div class="card-stat-number">70B</div>
+                                <div class="card-stat-label">LLM Parameters</div>
+                            </div>
+                            <div class="card-stat">
+                                <div class="card-stat-number">RAG</div>
+                                <div class="card-stat-label">Quote Engine</div>
+                            </div>
+                        </div>
+                    </div>
+                    <div class="card-footer">
+                        <div class="card-cta">
+                            <span class="cta-text">Enter Audit Chamber</span>
+                            <div class="cta-arrow">
+                                <i class="fas fa-arrow-right"></i>
+                            </div>
+                        </div>
+                    </div>
+                </a>
+
+                <!-- BAIL RECKONER CARD -->
+                <a href="/bail-reckoner" class="tool-card bail-card reveal reveal-delay-2" id="card-bail">
+                    <div class="card-glow-border"></div>
+                    <div class="card-bg-pattern">
+                        <svg viewBox="0 0 200 200" fill="none" xmlns="http://www.w3.org/2000/svg">
+                            <rect x="40" y="40" width="120" height="120" rx="10" stroke="currentColor" stroke-width="0.5"/>
+                            <rect x="60" y="60" width="80" height="80" rx="6" stroke="currentColor" stroke-width="0.5"/>
+                            <rect x="80" y="80" width="40" height="40" rx="4" stroke="currentColor" stroke-width="0.5"/>
+                            <line x1="40" y1="100" x2="160" y2="100" stroke="currentColor" stroke-width="0.3"/>
+                            <line x1="100" y1="40" x2="100" y2="160" stroke="currentColor" stroke-width="0.3"/>
+                        </svg>
+                    </div>
+                    <div class="card-header">
+                        <div class="card-icon-area">
+                            <div class="card-icon-ring"></div>
+                            <div class="card-icon-symbol">⚖️</div>
+                        </div>
+                        <div class="card-number">Module II — Risk Assessment Engine</div>
+                        <h3 class="card-title">Bail Reckoner</h3>
+                        <p class="card-subtitle">
+                            Calculate bail eligibility using AI-driven risk assessment. 
+                            Our engine analyzes historical case data, statutory provisions 
+                            under CrPC, PMLA, and NDPS to provide probability scores, 
+                            bond recommendations, and legal strategy insights.
+                        </p>
+                    </div>
+                    <div class="card-body">
+                        <div class="card-features">
+                            <div class="card-feature">
+                                <i class="fas fa-check"></i>
+                                <span>Historical case-based probability analysis</span>
+                            </div>
+                            <div class="card-feature">
+                                <i class="fas fa-check"></i>
+                                <span>Risk scoring (flight risk, influence, recidivism)</span>
+                            </div>
+                            <div class="card-feature">
+                                <i class="fas fa-check"></i>
+                                <span>CrPC Section 436A default bail detection</span>
+                            </div>
+                            <div class="card-feature">
+                                <i class="fas fa-check"></i>
+                                <span>Surety & personal bond requirement prediction</span>
+                            </div>
+                            <div class="card-feature">
+                                <i class="fas fa-check"></i>
+                                <span>Strategic legal recommendations</span>
+                            </div>
+                        </div>
+                        <div class="card-stats">
+                            <div class="card-stat">
+                                <div class="card-stat-number" id="stat-bail-cases">—</div>
+                                <div class="card-stat-label">Bail Records</div>
+                            </div>
+                            <div class="card-stat">
+                                <div class="card-stat-number">AI</div>
+                                <div class="card-stat-label">Risk Engine</div>
+                            </div>
+                            <div class="card-stat">
+                                <div class="card-stat-number">§436A</div>
+                                <div class="card-stat-label">CrPC Aware</div>
+                            </div>
+                        </div>
+                    </div>
+                    <div class="card-footer">
+                        <div class="card-cta">
+                            <span class="cta-text">Enter Bail Chamber</span>
+                            <div class="cta-arrow">
+                                <i class="fas fa-arrow-right"></i>
+                            </div>
+                        </div>
+                    </div>
+                </a>
+            </div>
+        </section>
+
+        <!-- CAPABILITIES RIBBON -->
+        <section class="capabilities-ribbon">
+            <div class="ribbon-inner">
+                <div class="ribbon-title">Platform Capabilities</div>
+                <div class="ribbon-grid">
+                    <div class="ribbon-item reveal">
+                        <div class="ribbon-icon">🧠</div>
+                        <div class="ribbon-item-title">LLM Intelligence</div>
+                        <div class="ribbon-item-desc">Powered by Llama 3.3 70B via Groq for sub-second legal reasoning</div>
+                    </div>
+                    <div class="ribbon-item reveal reveal-delay-1">
+                        <div class="ribbon-icon">📚</div>
+                        <div class="ribbon-item-title">RAG Pipeline</div>
+                        <div class="ribbon-item-desc">MiniLM-L6 embeddings search source judgments to verify quoted text</div>
+                    </div>
+                    <div class="ribbon-item reveal reveal-delay-2">
+                        <div class="ribbon-icon">🔬</div>
+                        <div class="ribbon-item-title">Hallucination Guard</div>
+                        <div class="ribbon-item-desc">Multi-layer verification: fuzzy search → LLM match → RAG quote check</div>
+                    </div>
+                    <div class="ribbon-item reveal reveal-delay-3">
+                        <div class="ribbon-icon">📊</div>
+                        <div class="ribbon-item-title">Data-Driven Bail</div>
+                        <div class="ribbon-item-desc">Historical bail outcomes analyzed for probability scoring & risk assessment</div>
+                    </div>
+                </div>
+            </div>
+        </section>
+
+        <!-- FOOTER -->
+        <footer class="footer">
+            <div class="footer-ornament">
+                <div class="footer-ornament-line"></div>
+                <span style="color: var(--gold); font-size: 0.7rem;">◆</span>
+                <div class="footer-ornament-line right"></div>
+            </div>
+            <div class="footer-motto">यतो धर्मस्ततो जयः</div>
+            <div class="footer-motto-en">Where there is Righteousness, there is Victory</div>
+            <div class="footer-powered">
+                POWERED BY GROQ × LLAMA 3.3 70B × MINILM-L6 RAG × SUPREME COURT ARCHIVE
+            </div>
+        </footer>
+    </div>
+
+    <!-- ========== JAVASCRIPT ========== -->
+    <script>
+        // ============================
+        // CONFIG
+        // ============================
+        const API_BASE = window.location.hostname === 'localhost' 
+            ? 'http://localhost:8000' 
+            : '';
+
+        // ============================
+        // BOOT SEQUENCE
+        // ============================
+        const bootScreen = document.getElementById('boot-screen');
+        const platform = document.getElementById('platform');
+
+        function runBoot() {
+            // Fetch stats during boot
+            fetchPlatformStats();
+
+            setTimeout(() => {
+                bootScreen.classList.add('dismissed');
+                platform.classList.add('visible');
+                setTimeout(() => {
+                    bootScreen.style.display = 'none';
+                    initScrollReveal();
+                }, 800);
+            }, 3500);
+        }
+
+        async function fetchPlatformStats() {
+            try {
+                const resp = await fetch(`${API_BASE}/db-stats`);
+                const data = await resp.json();
+                if (data.loaded && data.record_count) {
+                    animateCounter('stat-cases', data.record_count);
+                }
+            } catch (e) {
+                console.warn('Backend not reachable during boot:', e);
+            }
+
+            // Try to get bail reckoner stats
+            try {
+                document.getElementById('stat-bail-cases').textContent = 'LIVE';
+            } catch (e) {}
+        }
+
+        function animateCounter(elementId, target) {
+            const el = document.getElementById(elementId);
+            if (!el) return;
+
+            const duration = 2000;
+            const startTime = performance.now();
+            const startVal = 0;
+
+            function update(currentTime) {
+                const elapsed = currentTime - startTime;
+                const progress = Math.min(elapsed / duration, 1);
+                // Ease out cubic
+                const eased = 1 - Math.pow(1 - progress, 3);
+                const current = Math.round(startVal + (target - startVal) * eased);
+
+                if (target >= 1000) {
+                    el.textContent = (current / 1000).toFixed(1) + 'K';
+                } else {
+                    el.textContent = current.toLocaleString();
+                }
+
+                if (progress < 1) {
+                    requestAnimationFrame(update);
+                }
+            }
+
+            requestAnimationFrame(update);
+        }
+
+        // ============================
+        // CLOCK
+        // ============================
+        function updateClock() {
+            const now = new Date();
+            const dateStr = now.toLocaleDateString('en-IN', { day: '2-digit', month: 'short', year: 'numeric' });
+            const timeStr = now.toLocaleTimeString('en-IN', { hour: '2-digit', minute: '2-digit', second: '2-digit', hour12: false });
+            const el = document.getElementById('header-clock');
+            if (el) el.textContent = `${dateStr} ${timeStr}`;
+        }
+        setInterval(updateClock, 1000);
+        updateClock();
+
+        // ============================
+        // PARTICLES
+        // ============================
+        function createParticles() {
+            const field = document.getElementById('particle-field');
+            const count = 40;
+
+            for (let i = 0; i < count; i++) {
+                const p = document.createElement('div');
+                p.className = 'particle';
+                p.style.left = Math.random() * 100 + '%';
+                p.style.animationDuration = (8 + Math.random() * 15) + 's';
+                p.style.animationDelay = (Math.random() * 10) + 's';
+                p.style.width = (1 + Math.random() * 2) + 'px';
+                p.style.height = p.style.width;
+                field.appendChild(p);
+            }
+        }
+
+        // ============================
+        // MOUSE GLOW
+        // ============================
+        const mouseGlow = document.getElementById('mouse-glow');
+        let mouseX = -500, mouseY = -500;
+
+        document.addEventListener('mousemove', (e) => {
+            mouseX = e.clientX;
+            mouseY = e.clientY;
+        });
+
+        function updateMouseGlow() {
+            mouseGlow.style.transform = `translate(${mouseX - 200}px, ${mouseY - 200}px)`;
+            requestAnimationFrame(updateMouseGlow);
+        }
+
+        // ============================
+        // SCROLL REVEAL
+        // ============================
+        function initScrollReveal() {
+            const observer = new IntersectionObserver((entries) => {
+                entries.forEach(entry => {
+                    if (entry.isIntersecting) {
+                        entry.target.classList.add('visible');
+                    }
+                });
+            }, { threshold: 0.1, rootMargin: '0px 0px -50px 0px' });
+
+            document.querySelectorAll('.reveal').forEach(el => observer.observe(el));
+        }
+
+        // ============================
+        // CARD TILT EFFECT
+        // ============================
+        function initCardTilt() {
+            document.querySelectorAll('.tool-card').forEach(card => {
+                card.addEventListener('mousemove', (e) => {
+                    const rect = card.getBoundingClientRect();
+                    const x = e.clientX - rect.left;
+                    const y = e.clientY - rect.top;
+                    const centerX = rect.width / 2;
+                    const centerY = rect.height / 2;
+                    const rotateX = ((y - centerY) / centerY) * -3;
+                    const rotateY = ((x - centerX) / centerX) * 3;
+
+                    card.style.transform = `translateY(-8px) perspective(1000px) rotateX(${rotateX}deg) rotateY(${rotateY}deg)`;
+                });
+
+                card.addEventListener('mouseleave', () => {
+                    card.style.transform = 'translateY(0) perspective(1000px) rotateX(0) rotateY(0)';
+                });
+            });
+        }
+
+        // ============================
+        // KEYBOARD SHORTCUTS
+        // ============================
+        document.addEventListener('keydown', (e) => {
+            if (e.key === '1' && (e.metaKey || e.ctrlKey)) {
+                e.preventDefault();
+                window.location.href = '/auditor';
+            }
+            if (e.key === '2' && (e.metaKey || e.ctrlKey)) {
+                e.preventDefault();
+                window.location.href = '/bail-reckoner';
+            }
+        });
+
+        // ============================
+        // INIT
+        // ============================
+        document.addEventListener('DOMContentLoaded', () => {
+            createParticles();
+            updateMouseGlow();
+            runBoot();
+            setTimeout(initCardTilt, 4000);
+        });
+    </script>
+</body>
+</html>

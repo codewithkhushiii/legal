@@ -16,12 +16,18 @@ from typing import List, Optional
 from groq import Groq
 from sentence_transformers import SentenceTransformer
 from sklearn.metrics.pairwise import cosine_similarity
+from fastapi.middleware.cors import CORSMiddleware
+from fastapi.staticfiles import StaticFiles
+from fastapi.responses import FileResponse
+from dotenv import load_dotenv
 
 # ==========================================
 # 1. Configuration & Global State
 # ==========================================
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
+
+load_dotenv()
 
 GROQ_API_KEY = os.environ.get("GROQ_API_KEY", "")
 client = Groq(api_key=GROQ_API_KEY)
@@ -31,13 +37,22 @@ embedder = SentenceTransformer('all-MiniLM-L6-v2')
 
 # Global variable to hold our database
 df = pd.DataFrame()
+bail_df = pd.DataFrame() # Your new Reckoner DB
 
 # ==========================================
 # 2. Server Startup (Load Data)
 # ==========================================
+class ReckonerRequest(BaseModel):
+    statute: str
+    offense_category: str
+    imprisonment_duration_served: int
+    risk_of_escape: bool
+    risk_of_influence: bool
+    served_half_term: bool
+    
 @asynccontextmanager
 async def lifespan(app: FastAPI):
-    global df
+    global df, bail_df
     print("🚀 Starting Server: Gathering metadata from all folders...")
     all_dataframes = []
 
@@ -61,11 +76,31 @@ async def lifespan(app: FastAPI):
     else:
         print("❌ WARNING: No valid .parquet files were found. Search will fail.")
 
+    
+    csv_path = Path("a.csv")
+    if csv_path.exists():
+        try:
+            bail_df = pd.read_csv(csv_path)
+            print(f"⚖️ Successfully loaded {len(bail_df)} records into the Bail Reckoner!")
+        except Exception as e:
+            print(f"⚠️ Could not load Bail Reckoner CSV: {e}")
+    else:
+        print("❌ WARNING: bail_reckoner_database.csv not found.")
+
     yield
     print("🛑 Shutting down server...")
 
+
 # Initialize FastAPI
 app = FastAPI(title="Legal Citation Auditor API", lifespan=lifespan)
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=["*"],
+    allow_credentials=True,
+    allow_methods=["*"],
+    allow_headers=["*"],
+)
+app.mount("/static", StaticFiles(directory="frontend/static"), name="static")
 
 # ==========================================
 # 3. Pydantic Models
@@ -83,6 +118,29 @@ class SummaryRequest(BaseModel):
     total: int
     sc_count: int
     hc_count: int
+    
+@app.get("/", response_class=FileResponse)
+async def serve_homepage():
+    return FileResponse("frontend/templates/index.html")
+
+# Citation Auditor route
+@app.get("/auditor", response_class=FileResponse)
+async def serve_auditor():
+    return FileResponse("frontend/templates/auditor.html")
+
+# Bail Reckoner route
+@app.get("/bail-reckoner", response_class=FileResponse)
+async def serve_bail_reckoner():
+    return FileResponse("frontend/templates/bail-reckoner.html")
+
+# API stats endpoint (keep your existing one, just rename the root)
+@app.get("/api/health")
+def api_health():
+    return {
+        "message": "Legal AI Platform API is running!",
+        "endpoints": ["/audit-document", "/audit-multiple", "/verify-citation", "/chat", "/summarize", "/reckoner/bail", "/db-stats"],
+        "docs": "/docs"
+    }
 
 # ==========================================
 # 4. Core Helper Functions
@@ -173,6 +231,72 @@ def _read_pdf(filepath: Path) -> str:
         return ""
 
 
+@app.post("/reckoner/bail")
+async def calculate_bail_eligibility(req: ReckonerRequest):
+    """Bail Reckoner: Calculates risk scores and bail probability based on historical CSV data."""
+    if bail_df.empty:
+        raise HTTPException(status_code=500, detail="Bail database not loaded.")
+
+    print(f"🧮 Running Bail Reckoner for: {req.statute} - {req.offense_category}")
+
+    # 1. Filter the database for similar historical cases
+    # We use exact matches for statute and category to find relevant precedents
+    mask = (
+        (bail_df['statute'].str.lower() == req.statute.lower()) &
+        (bail_df['offense_category'].str.lower() == req.offense_category.lower())
+    )
+    
+    similar_cases = bail_df[mask]
+
+    if similar_cases.empty:
+        return JSONResponse({
+            "status": "NO_DATA",
+            "message": "No historical cases match this specific statute and offense category.",
+            "recommendation": "Manual assessment required."
+        })
+
+    # 2. Calculate Aggregated Metrics from similar cases
+    total_cases = len(similar_cases)
+    
+    # Bail Probability (Percentage of similar cases that got bail)
+    bail_granted = similar_cases['bail_eligibility'].sum()
+    bail_probability = (bail_granted / total_cases) * 100
+
+    # Average Risk Score
+    avg_risk_score = similar_cases['risk_score'].mean()
+    
+    # Bond Requirements (Most common requirements for this offense)
+    surety_prob = (similar_cases['surety_bond_required'].sum() / total_cases) * 100
+    personal_prob = (similar_cases['personal_bond_required'].sum() / total_cases) * 100
+
+    # 3. Apply Hard Logical Rules (e.g., CrPC Section 436A for serving half term)
+    statutory_warning = None
+    if req.served_half_term and req.statute.lower() != "pmla":
+        # Under Sec 436A CrPC, if half the maximum term is served, bail is generally a statutory right
+        statutory_warning = "⚠️ Client has served half their term. Under Sec 436A CrPC, they have a strong statutory ground for default bail, overriding standard risk scores."
+        bail_probability = max(bail_probability, 90.0) # Boost probability
+
+    # 4. Format the final intelligence report
+    # 4. Format the final intelligence report
+    return JSONResponse({
+        "status": "SUCCESS",
+        "inputs_analyzed": {
+            "statute": req.statute,
+            "category": req.offense_category,
+            "time_served": req.imprisonment_duration_served
+        },
+        "historical_insights": {
+            "similar_cases_analyzed": int(total_cases),
+            "historical_bail_probability": f"{float(bail_probability):.1f}%",
+            "average_risk_score": float(round(avg_risk_score, 2)),
+        },
+        "likely_conditions": {
+            # Wrapped in bool() to fix the JSON serialization error!
+            "surety_bond_likely": bool(surety_prob > 50),
+            "personal_bond_likely": bool(personal_prob > 50)
+        },
+        "legal_strategy_note": statutory_warning if statutory_warning else "Standard bail arguments apply. Focus on mitigating flight risk."
+    })
 def extract_text_from_pdf_path(db_path_value: str) -> str:
     """
     Locate and read a PDF based on the 'path' column from the parquet database.

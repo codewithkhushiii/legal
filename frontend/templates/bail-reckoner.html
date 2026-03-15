@@ -1,0 +1,1234 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>⚖️ Bail Reckoner — AI Risk Assessment Engine</title>
+    <link href="https://fonts.googleapis.com/css2?family=Playfair+Display:ital,wght@0,400;0,500;0,600;0,700;0,800;0,900;1,400;1,500&family=Cormorant+Garamond:ital,wght@0,300;0,400;0,500;0,600;0,700;1,300;1,400;1,500&family=JetBrains+Mono:wght@300;400;500;600;700&family=Inter:wght@300;400;500;600;700;800&display=swap" rel="stylesheet">
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.0/css/all.min.css">
+    <style>
+        :root {
+            --bg-deepest: #0a0a0f;
+            --bg-dark: #0d0d14;
+            --bg-panel: #111118;
+            --bg-card: #16161f;
+            --bg-elevated: #1a1a25;
+            --bg-hover: #1e1e2a;
+            --gold: #c9a84c;
+            --gold-light: #e8d48b;
+            --gold-dark: #8b6914;
+            --gold-glow: rgba(201, 168, 76, 0.15);
+            --gold-glow-strong: rgba(201, 168, 76, 0.35);
+            --crimson: #8b2035;
+            --crimson-light: #c4445a;
+            --emerald: #1a7a4c;
+            --emerald-light: #4caf8a;
+            --emerald-glow: rgba(26, 122, 76, 0.2);
+            --amber: #b8860b;
+            --amber-light: #e8b877;
+            --text-primary: #e8e4dc;
+            --text-secondary: #9a9488;
+            --text-muted: #5a5650;
+            --border-subtle: rgba(201, 168, 76, 0.08);
+            --border-gold: rgba(201, 168, 76, 0.2);
+            --border-strong: rgba(201, 168, 76, 0.35);
+            --font-display: 'Playfair Display', serif;
+            --font-body: 'Cormorant Garamond', serif;
+            --font-ui: 'Inter', sans-serif;
+            --font-mono: 'JetBrains Mono', monospace;
+        }
+
+        *, *::before, *::after { margin: 0; padding: 0; box-sizing: border-box; }
+
+        body {
+            background: var(--bg-deepest);
+            color: var(--text-primary);
+            font-family: var(--font-body);
+            min-height: 100vh;
+        }
+
+        .hidden { display: none !important; }
+
+        .bg-grid {
+            position: fixed; inset: 0; z-index: 0;
+            background-image:
+                linear-gradient(rgba(201,168,76,0.02) 1px, transparent 1px),
+                linear-gradient(90deg, rgba(201,168,76,0.02) 1px, transparent 1px);
+            background-size: 80px 80px;
+            pointer-events: none;
+        }
+
+        /* ── Header ── */
+        .bail-header {
+            position: sticky; top: 0; z-index: 100;
+            background: rgba(10,10,15,0.92);
+            backdrop-filter: blur(30px);
+            border-bottom: 1px solid var(--border-subtle);
+            padding: 0 2rem;
+        }
+
+        .bail-header-inner {
+            max-width: 1200px; margin: 0 auto;
+            height: 65px; display: flex;
+            align-items: center; justify-content: space-between;
+        }
+
+        .bail-header-left {
+            display: flex; align-items: center; gap: 1rem;
+        }
+
+        .back-btn {
+            display: flex; align-items: center; gap: 0.5rem;
+            text-decoration: none; color: var(--text-secondary);
+            font-family: var(--font-ui); font-size: 0.75rem;
+            letter-spacing: 1px; text-transform: uppercase;
+            padding: 0.4rem 0.8rem; border: 1px solid var(--border-subtle);
+            border-radius: 4px; transition: all 0.3s ease;
+        }
+
+        .back-btn:hover {
+            color: var(--gold); border-color: var(--border-gold);
+        }
+
+        .bail-header-title {
+            font-family: var(--font-display);
+            font-size: 1.1rem; font-weight: 700;
+            color: var(--emerald-light);
+            letter-spacing: 2px; text-transform: uppercase;
+        }
+
+        .bail-header-badge {
+            font-family: var(--font-mono); font-size: 0.55rem;
+            color: var(--text-muted); letter-spacing: 1px;
+            padding: 0.2rem 0.5rem; border: 1px solid var(--border-subtle);
+            border-radius: 3px;
+        }
+
+        .bail-header-right {
+            display: flex; align-items: center; gap: 0.75rem;
+        }
+
+        .db-status {
+            display: flex; align-items: center; gap: 0.4rem;
+            font-family: var(--font-mono); font-size: 0.55rem;
+            letter-spacing: 0.5px;
+        }
+
+        .db-status-dot {
+            width: 6px; height: 6px; border-radius: 50%;
+            background: var(--text-muted);
+            transition: background 0.3s ease;
+        }
+
+        .db-status-dot.online { background: var(--emerald-light); box-shadow: 0 0 6px var(--emerald-glow); }
+        .db-status-dot.offline { background: var(--crimson-light); }
+
+        .db-status-text { color: var(--text-muted); }
+
+        /* ── Main Content ── */
+        .bail-main {
+            position: relative; z-index: 1;
+            max-width: 1200px; margin: 0 auto;
+            padding: 2.5rem 2rem;
+            display: grid; grid-template-columns: 1fr 1fr;
+            gap: 2.5rem;
+        }
+
+        /* ── Form Panel ── */
+        .form-panel {
+            background: var(--bg-panel);
+            border: 1px solid var(--border-subtle);
+            border-radius: 12px; padding: 2rem;
+        }
+
+        .panel-header {
+            display: flex; align-items: center; gap: 0.75rem;
+            margin-bottom: 2rem; padding-bottom: 1rem;
+            border-bottom: 1px solid var(--border-subtle);
+        }
+
+        .panel-header-icon {
+            width: 40px; height: 40px;
+            border: 1.5px solid var(--emerald-light);
+            border-radius: 50%; display: flex;
+            align-items: center; justify-content: center;
+            font-size: 1.1rem;
+        }
+
+        .panel-header h2 {
+            font-family: var(--font-display);
+            font-size: 1.2rem; font-weight: 700;
+            color: var(--text-primary); letter-spacing: 1px;
+        }
+
+        .form-group {
+            margin-bottom: 1.5rem;
+        }
+
+        .form-label {
+            display: block; font-family: var(--font-ui);
+            font-size: 0.7rem; font-weight: 600;
+            letter-spacing: 1.5px; text-transform: uppercase;
+            color: var(--text-secondary); margin-bottom: 0.5rem;
+        }
+
+        .form-hint {
+            font-family: var(--font-ui); font-size: 0.6rem;
+            color: var(--text-muted); margin-top: 0.3rem;
+            font-style: italic;
+        }
+
+        .form-input, .form-select {
+            width: 100%; padding: 0.75rem 1rem;
+            background: var(--bg-card);
+            border: 1px solid var(--border-subtle);
+            border-radius: 6px; color: var(--text-primary);
+            font-family: var(--font-ui); font-size: 0.85rem;
+            transition: all 0.3s ease;
+            outline: none;
+        }
+
+        .form-input:focus, .form-select:focus {
+            border-color: var(--emerald-light);
+            box-shadow: 0 0 20px rgba(76,175,138,0.1);
+        }
+
+        .form-input.input-error, .form-select.input-error {
+            border-color: var(--crimson-light);
+            box-shadow: 0 0 15px rgba(139,32,53,0.15);
+        }
+
+        .form-select option {
+            background: var(--bg-card); color: var(--text-primary);
+        }
+
+        .form-checkbox-group {
+            display: flex; gap: 1.5rem; flex-wrap: wrap;
+        }
+
+        .form-checkbox {
+            display: flex; align-items: center; gap: 0.5rem;
+            cursor: pointer;
+        }
+
+        .form-checkbox input[type="checkbox"] {
+            appearance: none; width: 18px; height: 18px;
+            border: 1.5px solid var(--border-gold);
+            border-radius: 3px; background: var(--bg-card);
+            cursor: pointer; position: relative;
+            transition: all 0.3s ease;
+            flex-shrink: 0;
+        }
+
+        .form-checkbox input[type="checkbox"]:checked {
+            background: var(--emerald-light);
+            border-color: var(--emerald-light);
+        }
+
+        .form-checkbox input[type="checkbox"]:checked::after {
+            content: '✓'; position: absolute;
+            inset: 0; display: flex; align-items: center;
+            justify-content: center; color: var(--bg-deepest);
+            font-size: 0.7rem; font-weight: 700;
+        }
+
+        .form-checkbox-label {
+            font-family: var(--font-ui); font-size: 0.75rem;
+            color: var(--text-secondary);
+        }
+
+        .submit-btn {
+            width: 100%; padding: 1rem;
+            background: linear-gradient(135deg, var(--emerald), var(--emerald-light));
+            border: none; border-radius: 8px;
+            color: white; font-family: var(--font-display);
+            font-size: 1rem; font-weight: 700;
+            letter-spacing: 2px; text-transform: uppercase;
+            cursor: pointer; position: relative;
+            overflow: hidden; transition: all 0.4s ease;
+            margin-top: 1rem;
+        }
+
+        .submit-btn:hover {
+            transform: translateY(-2px);
+            box-shadow: 0 8px 30px rgba(76,175,138,0.3);
+        }
+
+        .submit-btn:disabled {
+            opacity: 0.5; cursor: not-allowed;
+            transform: none; box-shadow: none;
+        }
+
+        .submit-btn .btn-shine {
+            position: absolute; top: 0; left: -100%;
+            width: 100%; height: 100%;
+            background: linear-gradient(90deg, transparent, rgba(255,255,255,0.15), transparent);
+        }
+
+        .submit-btn:hover .btn-shine {
+            animation: btnShine 0.8s ease forwards;
+        }
+
+        @keyframes btnShine {
+            to { left: 100%; }
+        }
+
+        /* ── Results Panel ── */
+        .results-panel {
+            background: var(--bg-panel);
+            border: 1px solid var(--border-subtle);
+            border-radius: 12px; padding: 2rem;
+            display: flex; flex-direction: column;
+        }
+
+        .results-idle {
+            flex: 1; display: flex; flex-direction: column;
+            align-items: center; justify-content: center;
+            text-align: center; gap: 1rem; opacity: 0.5;
+        }
+
+        .results-idle i {
+            font-size: 3rem; color: var(--emerald-light);
+        }
+
+        .results-idle p {
+            font-family: var(--font-ui); font-size: 0.85rem;
+            color: var(--text-muted); max-width: 300px;
+        }
+
+        /* ── Loading ── */
+        .results-loading {
+            flex: 1; display: flex; flex-direction: column;
+            align-items: center; justify-content: center;
+            gap: 1.5rem;
+        }
+
+        .loading-scales {
+            font-size: 3rem;
+            animation: loadingBounce 1.2s ease-in-out infinite;
+        }
+
+        @keyframes loadingBounce {
+            0%, 100% { transform: scale(1) rotate(0deg); }
+            50% { transform: scale(1.1) rotate(5deg); }
+        }
+
+        .loading-text {
+            font-family: var(--font-display);
+            font-size: 1rem; color: var(--emerald-light);
+            letter-spacing: 2px;
+        }
+
+        .loading-sub {
+            font-family: var(--font-ui);
+            font-size: 0.75rem; color: var(--text-muted);
+        }
+
+        .loading-bar {
+            width: 200px; height: 3px;
+            background: var(--bg-card); border-radius: 2px;
+            overflow: hidden;
+        }
+
+        .loading-bar-fill {
+            height: 100%; width: 30%;
+            background: var(--emerald-light);
+            border-radius: 2px;
+            animation: loadingSlide 1.5s ease-in-out infinite;
+        }
+
+        @keyframes loadingSlide {
+            0% { transform: translateX(-100%); }
+            100% { transform: translateX(700%); }
+        }
+
+        /* ── Result Card ── */
+        .result-card {
+            animation: resultSlideIn 0.5s ease forwards;
+        }
+
+        @keyframes resultSlideIn {
+            from { opacity: 0; transform: translateY(20px); }
+            to { opacity: 1; transform: translateY(0); }
+        }
+
+        .result-verdict {
+            text-align: center; padding: 1.5rem;
+            border-radius: 8px; margin-bottom: 1.5rem;
+        }
+
+        .result-verdict.verdict-high {
+            background: rgba(76,175,138,0.08);
+            border: 1px solid rgba(76,175,138,0.2);
+        }
+        .result-verdict.verdict-high .result-verdict-text { color: var(--emerald-light); }
+
+        .result-verdict.verdict-medium {
+            background: rgba(184,134,11,0.08);
+            border: 1px solid rgba(184,134,11,0.2);
+        }
+        .result-verdict.verdict-medium .result-verdict-text { color: var(--amber-light); }
+
+        .result-verdict.verdict-low {
+            background: rgba(139,32,53,0.08);
+            border: 1px solid rgba(139,32,53,0.2);
+        }
+        .result-verdict.verdict-low .result-verdict-text { color: var(--crimson-light); }
+
+        .result-verdict.no-data {
+            background: rgba(232,184,119,0.08);
+            border: 1px solid rgba(232,184,119,0.2);
+        }
+        .result-verdict.no-data .result-verdict-text { color: var(--amber-light); }
+
+        .result-verdict.error {
+            background: rgba(139,32,53,0.08);
+            border: 1px solid rgba(139,32,53,0.2);
+        }
+        .result-verdict.error .result-verdict-text { color: var(--crimson-light); }
+
+        .result-verdict-icon { font-size: 2rem; margin-bottom: 0.5rem; }
+
+        .result-verdict-text {
+            font-family: var(--font-display);
+            font-size: 1.1rem; font-weight: 700;
+        }
+
+        .result-section { margin-bottom: 1.5rem; }
+
+        .result-section-title {
+            font-family: var(--font-mono);
+            font-size: 0.6rem; letter-spacing: 2px;
+            text-transform: uppercase; color: var(--text-muted);
+            margin-bottom: 0.75rem;
+            padding-bottom: 0.4rem;
+            border-bottom: 1px solid var(--border-subtle);
+        }
+
+        .result-row {
+            display: flex; justify-content: space-between;
+            align-items: center; padding: 0.5rem 0;
+            border-bottom: 1px solid rgba(201,168,76,0.04);
+        }
+
+        .result-row:last-child { border-bottom: none; }
+
+        .result-row-label {
+            font-family: var(--font-ui);
+            font-size: 0.75rem; color: var(--text-secondary);
+        }
+
+        .result-row-value {
+            font-family: var(--font-mono);
+            font-size: 0.8rem; font-weight: 600;
+            color: var(--text-primary);
+        }
+
+        .result-row-value.highlight { color: var(--emerald-light); font-size: 1rem; }
+        .result-row-value.warning { color: var(--amber-light); }
+        .result-row-value.danger { color: var(--crimson-light); }
+
+        /* ── Probability Gauge ── */
+        .probability-gauge {
+            position: relative; width: 160px; height: 160px;
+            margin: 1.5rem auto;
+        }
+
+        .gauge-ring {
+            width: 100%; height: 100%;
+            border-radius: 50%;
+            display: flex; align-items: center; justify-content: center;
+            transition: all 0.8s ease;
+        }
+
+        .gauge-inner {
+            width: 120px; height: 120px;
+            border-radius: 50%;
+            background: var(--bg-panel);
+            display: flex; flex-direction: column;
+            align-items: center; justify-content: center;
+        }
+
+        .gauge-pct {
+            font-family: var(--font-display);
+            font-size: 2rem; font-weight: 800;
+        }
+
+        .gauge-pct.gauge-high { color: var(--emerald-light); }
+        .gauge-pct.gauge-medium { color: var(--amber-light); }
+        .gauge-pct.gauge-low { color: var(--crimson-light); }
+
+        .gauge-label {
+            font-family: var(--font-mono);
+            font-size: 0.45rem; letter-spacing: 2px;
+            color: var(--text-muted); text-transform: uppercase;
+        }
+
+        /* ── Risk Meter ── */
+        .risk-meter { margin: 1rem 0; }
+
+        .risk-meter-bar {
+            width: 100%; height: 6px;
+            background: var(--bg-card);
+            border-radius: 3px; overflow: hidden;
+            margin-top: 0.5rem;
+        }
+
+        .risk-meter-fill {
+            height: 100%; border-radius: 3px;
+            transition: width 0.8s ease, background 0.8s ease;
+        }
+
+        .risk-meter-labels {
+            display: flex; justify-content: space-between;
+            margin-top: 0.3rem;
+        }
+
+        .risk-meter-labels span {
+            font-family: var(--font-mono);
+            font-size: 0.5rem; color: var(--text-muted);
+            letter-spacing: 1px; text-transform: uppercase;
+        }
+
+        /* ── Strategy Note ── */
+        .strategy-note {
+            padding: 1rem; border-radius: 6px;
+            background: rgba(201,168,76,0.05);
+            border: 1px solid rgba(201,168,76,0.15);
+            margin-top: 1rem;
+        }
+
+        .strategy-note.statutory-warning {
+            background: rgba(76,175,138,0.08);
+            border: 1px solid rgba(76,175,138,0.25);
+        }
+
+        .strategy-note-title {
+            font-family: var(--font-ui);
+            font-size: 0.65rem; font-weight: 600;
+            color: var(--gold); letter-spacing: 1.5px;
+            text-transform: uppercase; margin-bottom: 0.5rem;
+        }
+
+        .strategy-note.statutory-warning .strategy-note-title {
+            color: var(--emerald-light);
+        }
+
+        .strategy-note-text {
+            font-family: var(--font-body);
+            font-size: 0.95rem; color: var(--text-secondary);
+            line-height: 1.6; font-style: italic;
+        }
+
+        /* ── Bond Badges ── */
+        .bond-badges {
+            display: flex; gap: 0.75rem; margin-top: 0.5rem;
+            flex-wrap: wrap;
+        }
+
+        .bond-badge {
+            padding: 0.4rem 0.8rem;
+            border-radius: 4px; font-family: var(--font-mono);
+            font-size: 0.6rem; letter-spacing: 1px;
+            text-transform: uppercase;
+        }
+
+        .bond-badge.likely {
+            background: rgba(76,175,138,0.1);
+            border: 1px solid rgba(76,175,138,0.3);
+            color: var(--emerald-light);
+        }
+
+        .bond-badge.unlikely {
+            background: rgba(154,148,136,0.05);
+            border: 1px solid var(--border-subtle);
+            color: var(--text-muted);
+        }
+
+        /* ── Risk Flags ── */
+        .risk-flags {
+            display: flex; gap: 0.5rem; flex-wrap: wrap;
+            margin-top: 0.5rem;
+        }
+
+        .risk-flag {
+            padding: 0.3rem 0.6rem;
+            border-radius: 4px; font-family: var(--font-mono);
+            font-size: 0.55rem; letter-spacing: 0.5px;
+        }
+
+        .risk-flag.active {
+            background: rgba(139,32,53,0.12);
+            border: 1px solid rgba(196,68,90,0.3);
+            color: var(--crimson-light);
+        }
+
+        .risk-flag.inactive {
+            background: rgba(76,175,138,0.06);
+            border: 1px solid rgba(76,175,138,0.15);
+            color: var(--emerald-light);
+        }
+
+        /* ── Error Display ── */
+        .error-detail {
+            padding: 0.75rem 1rem;
+            background: rgba(139,32,53,0.08);
+            border: 1px solid rgba(139,32,53,0.2);
+            border-radius: 6px; margin-top: 1rem;
+        }
+
+        .error-detail-text {
+            font-family: var(--font-mono);
+            font-size: 0.7rem; color: var(--crimson-light);
+            word-break: break-word;
+        }
+
+        /* ── Penalty Info ── */
+        .penalty-badge {
+            display: inline-block;
+            padding: 0.25rem 0.6rem;
+            border-radius: 3px;
+            font-family: var(--font-mono);
+            font-size: 0.6rem;
+            letter-spacing: 0.5px;
+        }
+
+        .penalty-badge.imprisonment {
+            background: rgba(139,32,53,0.1);
+            border: 1px solid rgba(139,32,53,0.25);
+            color: var(--crimson-light);
+        }
+
+        .penalty-badge.fine {
+            background: rgba(184,134,11,0.1);
+            border: 1px solid rgba(184,134,11,0.25);
+            color: var(--amber-light);
+        }
+
+        .penalty-badge.both {
+            background: rgba(201,168,76,0.1);
+            border: 1px solid rgba(201,168,76,0.25);
+            color: var(--gold-light);
+        }
+
+        /* ── Timestamp ── */
+        .result-timestamp {
+            font-family: var(--font-mono);
+            font-size: 0.55rem; color: var(--text-muted);
+            text-align: right; margin-top: 1.5rem;
+            letter-spacing: 0.5px;
+            padding-top: 0.75rem;
+            border-top: 1px solid var(--border-subtle);
+        }
+
+        /* ── Footer ── */
+        .bail-footer {
+            position: relative; z-index: 1;
+            text-align: center; padding: 2rem;
+            border-top: 1px solid var(--border-subtle);
+        }
+
+        .bail-footer-text {
+            font-family: var(--font-ui);
+            font-size: 0.6rem; color: var(--text-muted);
+            letter-spacing: 1.5px;
+        }
+
+        @media (max-width: 800px) {
+            .bail-main { grid-template-columns: 1fr; }
+            .bail-header-badge { display: none; }
+            .bail-header-inner { height: 55px; }
+            .bail-main { padding: 1.5rem 1rem; }
+            .form-panel, .results-panel { padding: 1.5rem; }
+            .db-status { display: none; }
+        }
+    </style>
+</head>
+<body>
+
+    <div class="bg-grid"></div>
+
+    <!-- ══════════════════════════════════════════════
+         HEADER
+    ══════════════════════════════════════════════ -->
+    <header class="bail-header">
+        <div class="bail-header-inner">
+            <div class="bail-header-left">
+                <a href="/" class="back-btn">
+                    <i class="fas fa-arrow-left"></i> Platform Home
+                </a>
+                <span class="bail-header-title">⚖️ Bail Reckoner</span>
+            </div>
+            <div class="bail-header-right">
+                <div class="db-status">
+                    <div class="db-status-dot" id="db-dot"></div>
+                    <span class="db-status-text" id="db-text">Checking DB...</span>
+                </div>
+                <span class="bail-header-badge">AI Risk Assessment Engine v1.0</span>
+            </div>
+        </div>
+    </header>
+
+    <!-- ══════════════════════════════════════════════
+         MAIN
+    ══════════════════════════════════════════════ -->
+    <main class="bail-main">
+
+        <!-- ─── Form Panel ─── -->
+        <div class="form-panel">
+            <div class="panel-header">
+                <div class="panel-header-icon">📋</div>
+                <h2>Case Parameters</h2>
+            </div>
+
+            <form id="bail-form" onsubmit="event.preventDefault(); calculateBail();">
+
+                <!-- Statute -->
+                <div class="form-group">
+                    <label class="form-label">Statute / Act</label>
+                    <select class="form-select" id="bail-statute" required>
+                        <option value="">— Select Statute —</option>
+                        <option value="IPC">Indian Penal Code (IPC)</option>
+                        <option value="NDPS">NDPS Act</option>
+                        <option value="PMLA">Prevention of Money Laundering Act (PMLA)</option>
+                        <option value="UAPA">UAPA</option>
+                        <option value="Arms Act">Arms Act</option>
+                        <option value="IT Act">Information Technology Act</option>
+                        <option value="CrPC">Code of Criminal Procedure (CrPC)</option>
+                        <option value="SCST Act">SC/ST Prevention of Atrocities Act</option>
+                        <option value="POCSO">POCSO Act</option>
+                        <option value="Other">Other</option>
+                    </select>
+                    <div class="form-hint">Must match database records exactly (e.g. "SCST Act", "PMLA", "NDPS")</div>
+                </div>
+
+                <!-- Offense Category -->
+                <div class="form-group">
+                    <label class="form-label">Offense Category</label>
+                    <select class="form-select" id="bail-category" required>
+                        <option value="">— Select Category —</option>
+                        <option value="Crimes Against Children">Crimes Against Children</option>
+                        <option value="Crimes Against Foreigners">Crimes Against Foreigners</option>
+                        <option value="Crimes Against SCs and STs">Crimes Against SCs and STs</option>
+                        <option value="Offences Against the State">Offences Against the State</option>
+                        <option value="Cyber Crime">Cyber Crime</option>
+                        <option value="Economic Offense">Economic Offense</option>
+                        <option value="Violent Crime">Violent Crime</option>
+                        <option value="Drug Offense">Drug Offense</option>
+                        <option value="White Collar Crime">White Collar Crime</option>
+                        <option value="Property Crime">Property Crime</option>
+                        <option value="Terrorism">Terrorism Related</option>
+                        <option value="Other">Other</option>
+                    </select>
+                    <div class="form-hint">Categories sourced from historical bail database records</div>
+                </div>
+
+                <!-- Duration Served -->
+                <div class="form-group">
+                    <label class="form-label">Imprisonment Duration Served (Days)</label>
+                    <input type="number" class="form-input" id="bail-duration" 
+                           placeholder="e.g. 180" min="0" max="10000" required>
+                    <div class="form-hint">Number of days the accused has been incarcerated</div>
+                </div>
+
+                <!-- Risk Factors -->
+                <div class="form-group">
+                    <label class="form-label">Risk Factors</label>
+                    <div class="form-checkbox-group">
+                        <label class="form-checkbox">
+                            <input type="checkbox" id="bail-flight">
+                            <span class="form-checkbox-label">Risk of Flight / Escape</span>
+                        </label>
+                        <label class="form-checkbox">
+                            <input type="checkbox" id="bail-influence">
+                            <span class="form-checkbox-label">Risk of Influencing Witnesses</span>
+                        </label>
+                    </div>
+                </div>
+
+                <!-- Statutory Considerations -->
+                <div class="form-group">
+                    <label class="form-label">Statutory Considerations</label>
+                    <div class="form-checkbox-group">
+                        <label class="form-checkbox">
+                            <input type="checkbox" id="bail-halfterm">
+                            <span class="form-checkbox-label">Has served half of maximum term (§436A CrPC)</span>
+                        </label>
+                    </div>
+                </div>
+
+                <button type="submit" class="submit-btn" id="bail-submit">
+                    <span class="btn-shine"></span>
+                    <i class="fas fa-gavel"></i> &nbsp; CALCULATE BAIL ELIGIBILITY
+                </button>
+            </form>
+        </div>
+
+        <!-- ─── Results Panel ─── -->
+        <div class="results-panel" id="results-panel">
+            <div class="panel-header">
+                <div class="panel-header-icon">📊</div>
+                <h2>Assessment Report</h2>
+            </div>
+
+            <div class="results-idle" id="results-idle">
+                <i class="fas fa-balance-scale"></i>
+                <p>Fill in the case parameters and submit to generate an AI-powered bail eligibility assessment.</p>
+            </div>
+
+            <div class="results-loading hidden" id="results-loading">
+                <div class="loading-scales">⚖️</div>
+                <div class="loading-text">ANALYZING CASE</div>
+                <div class="loading-sub">Cross-referencing historical bail data...</div>
+                <div class="loading-bar"><div class="loading-bar-fill"></div></div>
+            </div>
+
+            <div class="result-card hidden" id="result-card">
+                <!-- Populated by JS -->
+            </div>
+        </div>
+    </main>
+
+    <!-- ══════════════════════════════════════════════
+         FOOTER
+    ══════════════════════════════════════════════ -->
+    <footer class="bail-footer">
+        <div class="bail-footer-text">
+            BAIL RECKONER — AI-POWERED RISK ASSESSMENT • POWERED BY GROQ × LLAMA 3.3 70B
+        </div>
+    </footer>
+
+    <!-- ══════════════════════════════════════════════
+         JAVASCRIPT
+    ══════════════════════════════════════════════ -->
+    <script>
+        // ============================================================
+        // API BASE — same origin since backend serves this file
+        // ============================================================
+        const API_BASE = window.location.origin;
+
+        // ============================================================
+        // ON LOAD — Check if bail database is loaded
+        // ============================================================
+        document.addEventListener('DOMContentLoaded', async () => {
+            const dot = document.getElementById('db-dot');
+            const text = document.getElementById('db-text');
+            try {
+                const resp = await fetch(`${API_BASE}/api/health`);
+                if (resp.ok) {
+                    dot.classList.add('online');
+                    text.textContent = 'DB Online';
+                } else {
+                    dot.classList.add('offline');
+                    text.textContent = 'DB Error';
+                }
+            } catch {
+                dot.classList.add('offline');
+                text.textContent = 'Offline';
+            }
+        });
+
+        // ============================================================
+        // CLEAR VALIDATION STYLES on input change
+        // ============================================================
+        document.querySelectorAll('.form-select, .form-input').forEach(el => {
+            el.addEventListener('change', () => el.classList.remove('input-error'));
+            el.addEventListener('input', () => el.classList.remove('input-error'));
+        });
+
+        // ============================================================
+        // MAIN — Calculate Bail Eligibility
+        // ============================================================
+        async function calculateBail() {
+            // 1. Read form values
+            const statuteEl = document.getElementById('bail-statute');
+            const categoryEl = document.getElementById('bail-category');
+            const durationEl = document.getElementById('bail-duration');
+
+            const statute = statuteEl.value;
+            const category = categoryEl.value;
+            const durationRaw = durationEl.value;
+            const duration = parseInt(durationRaw) || 0;
+            const flight = document.getElementById('bail-flight').checked;
+            const influence = document.getElementById('bail-influence').checked;
+            const halfterm = document.getElementById('bail-halfterm').checked;
+
+            // 2. Client-side validation
+            let hasError = false;
+            if (!statute) {
+                statuteEl.classList.add('input-error');
+                hasError = true;
+            }
+            if (!category) {
+                categoryEl.classList.add('input-error');
+                hasError = true;
+            }
+            if (durationRaw === '' || durationRaw === null) {
+                durationEl.classList.add('input-error');
+                hasError = true;
+            }
+
+            if (hasError) {
+                showInlineError('Please fill in all required fields before submitting.');
+                return;
+            }
+
+            // 3. Toggle UI state
+            const idleEl = document.getElementById('results-idle');
+            const loadingEl = document.getElementById('results-loading');
+            const resultEl = document.getElementById('result-card');
+            const submitBtn = document.getElementById('bail-submit');
+
+            idleEl.classList.add('hidden');
+            resultEl.classList.add('hidden');
+            loadingEl.classList.remove('hidden');
+            submitBtn.disabled = true;
+
+            // 4. Build request body — matches ReckonerRequest Pydantic model
+            //    Fields: statute, offense_category, imprisonment_duration_served,
+            //            risk_of_escape, risk_of_influence, served_half_term
+            const requestBody = {
+                statute: statute,
+                offense_category: category,
+                imprisonment_duration_served: duration,
+                risk_of_escape: flight,
+                risk_of_influence: influence,
+                served_half_term: halfterm
+            };
+
+            try {
+                // 5. POST to /reckoner/bail
+                const resp = await fetch(`${API_BASE}/reckoner/bail`, {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify(requestBody)
+                });
+
+                // 6. Handle HTTP-level errors (e.g. 500 "Bail database not loaded")
+                if (!resp.ok) {
+                    let errorMsg = `Server returned ${resp.status}`;
+                    try {
+                        const errData = await resp.json();
+                        // FastAPI HTTPException returns { "detail": "..." }
+                        errorMsg = errData.detail || errData.message || errorMsg;
+                    } catch (_) {
+                        // Response wasn't JSON
+                    }
+                    throw new Error(errorMsg);
+                }
+
+                // 7. Parse JSON response
+                const data = await resp.json();
+
+                // 8. Render result
+                loadingEl.classList.add('hidden');
+                renderResult(data, requestBody);
+                resultEl.classList.remove('hidden');
+
+            } catch (err) {
+                loadingEl.classList.add('hidden');
+                renderError(err.message);
+                resultEl.classList.remove('hidden');
+            } finally {
+                submitBtn.disabled = false;
+            }
+        }
+
+        // ============================================================
+        // RENDER RESULT — Handles SUCCESS and NO_DATA from backend
+        //
+        // Backend response shapes:
+        //
+        // NO_DATA:
+        //   { status: "NO_DATA", message: "...", recommendation: "..." }
+        //
+        // SUCCESS:
+        //   {
+        //     status: "SUCCESS",
+        //     inputs_analyzed: { statute, category, time_served },
+        //     historical_insights: {
+        //       similar_cases_analyzed: int,
+        //       historical_bail_probability: "72.5%",   // string with %
+        //       average_risk_score: 1.5                  // float
+        //     },
+        //     likely_conditions: {
+        //       surety_bond_likely: true/false,
+        //       personal_bond_likely: true/false
+        //     },
+        //     legal_strategy_note: "string or null"
+        //   }
+        // ============================================================
+        function renderResult(data, requestBody) {
+            const el = document.getElementById('result-card');
+            const now = new Date().toLocaleString('en-IN', {
+                dateStyle: 'medium', timeStyle: 'short', timeZone: 'Asia/Kolkata'
+            });
+
+            // ─── NO_DATA response ───────────────────────────────
+            if (data.status === 'NO_DATA') {
+                el.innerHTML = `
+                    <div class="result-verdict no-data">
+                        <div class="result-verdict-icon">⚠️</div>
+                        <div class="result-verdict-text">${esc(data.message || 'No matching historical data found.')}</div>
+                    </div>
+
+                    <div class="result-section">
+                        <div class="result-section-title">Submitted Parameters</div>
+                        <div class="result-row">
+                            <span class="result-row-label">Statute</span>
+                            <span class="result-row-value">${esc(requestBody.statute)}</span>
+                        </div>
+                        <div class="result-row">
+                            <span class="result-row-label">Offense Category</span>
+                            <span class="result-row-value">${esc(requestBody.offense_category)}</span>
+                        </div>
+                        <div class="result-row">
+                            <span class="result-row-label">Time Served</span>
+                            <span class="result-row-value">${requestBody.imprisonment_duration_served} days</span>
+                        </div>
+                        <div class="result-row">
+                            <span class="result-row-label">Flight Risk</span>
+                            <span class="result-row-value">${requestBody.risk_of_escape ? 'Yes' : 'No'}</span>
+                        </div>
+                        <div class="result-row">
+                            <span class="result-row-label">Witness Influence Risk</span>
+                            <span class="result-row-value">${requestBody.risk_of_influence ? 'Yes' : 'No'}</span>
+                        </div>
+                        <div class="result-row">
+                            <span class="result-row-label">Half-Term Served (§436A)</span>
+                            <span class="result-row-value">${requestBody.served_half_term ? 'Yes' : 'No'}</span>
+                        </div>
+                    </div>
+
+                    <div class="strategy-note">
+                        <div class="strategy-note-title"><i class="fas fa-lightbulb"></i> Recommendation</div>
+                        <div class="strategy-note-text">${esc(data.recommendation || 'Manual assessment by a legal professional is recommended. Try adjusting the statute or category to match available records.')}</div>
+                    </div>
+
+                    <div class="result-timestamp">Report generated: ${now} IST</div>
+                `;
+                return;
+            }
+
+            // ─── SUCCESS response ───────────────────────────────
+            const insights = data.historical_insights || {};
+            const conditions = data.likely_conditions || {};
+            const inputs = data.inputs_analyzed || {};
+            const strategyNote = data.legal_strategy_note || '';
+
+            // Parse probability — backend sends "72.5%" as a string
+            const probStr = String(insights.historical_bail_probability || '0%');
+            const prob = parseFloat(probStr.replace('%', '')) || 0;
+
+            // Risk score — backend sends as float (e.g. 1.5)
+            const risk = parseFloat(insights.average_risk_score) || 0;
+
+            // Similar cases — backend sends as int
+            const similarCases = parseInt(insights.similar_cases_analyzed) || 0;
+
+            // Bond conditions — backend sends Python booleans serialized as JSON booleans
+            const suretyLikely = conditions.surety_bond_likely === true;
+            const personalLikely = conditions.personal_bond_likely === true;
+
+            // ── Verdict tier ──
+            let verdictClass, verdictIcon, verdictText, gaugeClass, gaugeColor;
+            if (prob >= 60) {
+                verdictClass = 'verdict-high';
+                verdictIcon = '✅';
+                verdictText = 'BAIL LIKELY FAVORABLE';
+                gaugeClass = 'gauge-high';
+                gaugeColor = 'var(--emerald-light)';
+            } else if (prob >= 30) {
+                verdictClass = 'verdict-medium';
+                verdictIcon = '⚠️';
+                verdictText = 'BAIL MODERATELY LIKELY';
+                gaugeClass = 'gauge-medium';
+                gaugeColor = 'var(--amber-light)';
+            } else {
+                verdictClass = 'verdict-low';
+                verdictIcon = '❌';
+                verdictText = 'BAIL UNLIKELY — STRONG OPPOSITION EXPECTED';
+                gaugeClass = 'gauge-low';
+                gaugeColor = 'var(--crimson-light)';
+            }
+
+            // ── Risk tier ──
+            let riskClass = 'highlight';
+            let riskColor = 'var(--emerald-light)';
+            let riskLabel = 'Low Risk';
+            if (risk > 6) {
+                riskClass = 'danger';
+                riskColor = 'var(--crimson-light)';
+                riskLabel = 'High Risk';
+            } else if (risk > 3) {
+                riskClass = 'warning';
+                riskColor = 'var(--amber-light)';
+                riskLabel = 'Moderate Risk';
+            }
+
+            // ── Statutory warning detection ──
+            const isStatutoryWarning = strategyNote.includes('436A') || strategyNote.includes('statutory');
+
+            // ── Conic gradient degrees ──
+            const conicDeg = Math.min(prob * 3.6, 360);
+
+            el.innerHTML = `
+                <!-- Verdict Banner -->
+                <div class="result-verdict ${verdictClass}">
+                    <div class="result-verdict-icon">${verdictIcon}</div>
+                    <div class="result-verdict-text">${verdictText}</div>
+                </div>
+
+                <!-- Probability Gauge -->
+                <div class="probability-gauge">
+                    <div class="gauge-ring" style="background: conic-gradient(${gaugeColor} ${conicDeg}deg, var(--bg-card) ${conicDeg}deg);">
+                        <div class="gauge-inner">
+                            <div class="gauge-pct ${gaugeClass}">${prob.toFixed(1)}%</div>
+                            <div class="gauge-label">Bail Probability</div>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Section I: Historical Insights -->
+                <div class="result-section">
+                    <div class="result-section-title">I. Historical Insights</div>
+                    <div class="result-row">
+                        <span class="result-row-label">Similar Cases Analyzed</span>
+                        <span class="result-row-value">${similarCases}</span>
+                    </div>
+                    <div class="result-row">
+                        <span class="result-row-label">Historical Bail Probability</span>
+                        <span class="result-row-value highlight">${esc(probStr)}</span>
+                    </div>
+                    <div class="result-row">
+                        <span class="result-row-label">Average Risk Score</span>
+                        <span class="result-row-value ${riskClass}">${risk.toFixed(2)} / 10</span>
+                    </div>
+
+                    <!-- Risk Meter Bar -->
+                    <div class="risk-meter">
+                        <div class="risk-meter-bar">
+                            <div class="risk-meter-fill" style="width: ${Math.min((risk / 10) * 100, 100)}%; background: ${riskColor};"></div>
+                        </div>
+                        <div class="risk-meter-labels">
+                            <span>Low</span>
+                            <span>${riskLabel}</span>
+                            <span>High</span>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Section II: Case Parameters -->
+                <div class="result-section">
+                    <div class="result-section-title">II. Case Parameters Analyzed</div>
+                    <div class="result-row">
+                        <span class="result-row-label">Statute</span>
+                        <span class="result-row-value">${esc(inputs.statute || requestBody.statute)}</span>
+                    </div>
+                    <div class="result-row">
+                        <span class="result-row-label">Category</span>
+                        <span class="result-row-value">${esc(inputs.category || requestBody.offense_category)}</span>
+                    </div>
+                    <div class="result-row">
+                        <span class="result-row-label">Time Served</span>
+                        <span class="result-row-value">${inputs.time_served != null ? inputs.time_served : requestBody.imprisonment_duration_served} days</span>
+                    </div>
+
+                    <!-- Risk Flags -->
+                    <div style="margin-top: 0.75rem;">
+                        <div class="result-section-title" style="margin-bottom: 0.5rem; border-bottom: none; padding-bottom: 0;">Risk Flags Submitted</div>
+                        <div class="risk-flags">
+                            <span class="risk-flag ${requestBody.risk_of_escape ? 'active' : 'inactive'}">
+                                ${requestBody.risk_of_escape ? '⚠ Flight Risk' : '✓ No Flight Risk'}
+                            </span>
+                            <span class="risk-flag ${requestBody.risk_of_influence ? 'active' : 'inactive'}">
+                                ${requestBody.risk_of_influence ? '⚠ Witness Influence' : '✓ No Witness Risk'}
+                            </span>
+                            <span class="risk-flag ${requestBody.served_half_term ? 'inactive' : 'active'}">
+                                ${requestBody.served_half_term ? '✓ §436A Half-Term Served' : '✗ Half-Term Not Served'}
+                            </span>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Section III: Likely Conditions -->
+                <div class="result-section">
+                    <div class="result-section-title">III. Likely Bail Conditions</div>
+                    <div class="bond-badges">
+                        <span class="bond-badge ${suretyLikely ? 'likely' : 'unlikely'}">
+                            ${suretyLikely ? '✓' : '✗'} Surety Bond ${suretyLikely ? 'Likely Required' : 'Unlikely'}
+                        </span>
+                        <span class="bond-badge ${personalLikely ? 'likely' : 'unlikely'}">
+                            ${personalLikely ? '✓' : '✗'} Personal Bond ${personalLikely ? 'Likely Required' : 'Unlikely'}
+                        </span>
+                    </div>
+                </div>
+
+                <!-- Strategy Note -->
+                ${strategyNote ? `
+                <div class="strategy-note ${isStatutoryWarning ? 'statutory-warning' : ''}">
+                    <div class="strategy-note-title">
+                        <i class="fas ${isStatutoryWarning ? 'fa-shield-alt' : 'fa-lightbulb'}"></i>
+                        ${isStatutoryWarning ? 'Statutory Ground Detected' : 'Legal Strategy Note'}
+                    </div>
+                    <div class="strategy-note-text">${esc(strategyNote)}</div>
+                </div>` : ''}
+
+                <div class="result-timestamp">
+                    Report generated: ${now} IST • Based on ${similarCases} similar case(s) in database
+                </div>
+            `;
+        }
+
+        // ============================================================
+        // RENDER ERROR — Network failures, 500s, etc.
+        // ============================================================
+        function renderError(message) {
+            const el = document.getElementById('result-card');
+            el.innerHTML = `
+                <div class="result-verdict error">
+                    <div class="result-verdict-icon">❌</div>
+                    <div class="result-verdict-text">ASSESSMENT FAILED</div>
+                </div>
+                <div class="error-detail">
+                    <div class="error-detail-text">${esc(message)}</div>
+                </div>
+                <div class="strategy-note">
+                    <div class="strategy-note-title"><i class="fas fa-redo"></i> Troubleshooting</div>
+                    <div class="strategy-note-text">
+                        Verify the server is running and the bail database (a.csv) is loaded correctly.
+                        Check that the CSV contains columns: statute, offense_category, bail_eligibility, risk_score, surety_bond_required, personal_bond_required.
+                        Review the server console for detailed error logs, then retry.
+                    </div>
+                </div>
+            `;
+        }
+
+        // ============================================================
+        // INLINE ERROR — Quick validation feedback
+        // ============================================================
+        function showInlineError(msg) {
+            const el = document.getElementById('result-card');
+            const idleEl = document.getElementById('results-idle');
+            idleEl.classList.add('hidden');
+            el.classList.remove('hidden');
+            el.innerHTML = `
+                <div class="result-verdict no-data">
+                    <div class="result-verdict-icon">📝</div>
+                    <div class="result-verdict-text">${esc(msg)}</div>
+                </div>
+            `;
+        }
+
+        // ============================================================
+        // ESCAPE — XSS-safe text insertion
+        // ============================================================
+        function esc(s) {
+            if (s === null || s === undefined) return '';
+            const div = document.createElement('div');
+            div.textContent = String(s);
+            return div.innerHTML;
+        }
+    </script>
+</body>
+</html>
