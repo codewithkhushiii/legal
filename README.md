@@ -6,8 +6,8 @@ A comprehensive AI-powered platform for legal research and analysis focused on t
 
 
 ## Overview
+This platform has ample tools to deal with variou legal problems with AI integrated:
 
-This platform provides legal professionals with advanced AI tools for:
 - **Citation Auditing**: Verify legal citations and quotes using Retrieval-Augmented Generation (RAG) with semantic search and LLM verification
 - **Bail Reckoner**: AI-driven risk assessment for bail decisions based on legal precedents
 - **Case Database**: Comprehensive archive of Supreme Court judgments with metadata extraction and search capabilities
@@ -52,23 +52,16 @@ This platform provides legal professionals with advanced AI tools for:
 - **PDF Archive**: Original judgment documents
 - **SQLite/PostgreSQL**: Optional relational database for advanced queries
 
-## Installation
-
-### Prerequisites
-- Python 3.8+
-- Node.js (optional, for frontend development)
-- Groq API key
-
 ### Setup
 1. Clone the repository:
    ```bash
-   git clone <repository-url>
+   git clone https://github.com/codewithkhushiii/legal.git
    cd legal
    ```
 
 2. Install Python dependencies:
    ```bash
-   pip install fastapi uvicorn python-dotenv groq sentence-transformers scikit-learn pandas pyarrow PyPDF2 python-multipart
+   pip install -r requirments.txt
    ```
 
 3. Set up environment variables:
@@ -88,7 +81,7 @@ This platform provides legal professionals with advanced AI tools for:
 
 ### Starting the Server
 ```bash
-python server.py
+uvicorn main:app --reload
 ```
 Access the web interface at `http://localhost:8000/app`
 
