@@ -198,13 +198,7 @@ This platform is designed for legal research and analysis purposes. Users should
 4. Test thoroughly with sample legal documents
 5. Submit a pull request
 
-## License
 
-[Specify your license here]
-
-## Support
-
-For technical support or feature requests, please [contact method].
 
 ## Version History
 
