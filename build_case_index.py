@@ -1,146 +1,241 @@
 """
-Offline pipeline to build the Case Intelligence Layer.
-Run this ONCE (or whenever you add new PDFs).
+Optimized offline pipeline to build the Case Intelligence Layer.
+Designed for low-VRAM GPUs (4GB) running Ollama.
 
 Usage: python build_case_index.py
 """
 
 import os
+import re
 import json
-import time
 import logging
+import requests
 import numpy as np
 import pandas as pd
 import PyPDF2
 from pathlib import Path
-from groq import Groq
+from concurrent.futures import ThreadPoolExecutor, as_completed
 from sentence_transformers import SentenceTransformer
-from dotenv import load_dotenv
+from time import time, sleep
 
-load_dotenv()
-
-logging.basicConfig(level=logging.INFO)
+logging.basicConfig(
+    level=logging.INFO,
+    format='%(asctime)s | %(levelname)s | %(message)s',
+    datefmt='%H:%M:%S'
+)
 logger = logging.getLogger(__name__)
-
-client = Groq(api_key=os.environ.get("GROQ_API_KEY", ""))
-embedder = SentenceTransformer('all-MiniLM-L6-v2')
 
 # ─────────────────────────────────────────
 # Configuration
 # ─────────────────────────────────────────
-OUTPUT_CARDS = Path("case_cards.parquet")
-OUTPUT_EMBEDDINGS = Path("case_embeddings.npy")
-OUTPUT_PATHS = Path("case_paths.json")  # Maps index → file path
+OUTPUT_CARDS       = Path("case_cards_ollama.parquet")
+OUTPUT_EMBEDDINGS  = Path("case_embeddings_ollama.npy")
+CHECKPOINT_FILE    = Path("pipeline_checkpoint_ollama.json")
+CHECKPOINT_INTERVAL = 10        # Save more often for safety
 
-# Rate limiting for Groq free tier
-REQUESTS_PER_MINUTE = 28  # Stay under 30 RPM limit
-DELAY_BETWEEN_REQUESTS = 60.0 / REQUESTS_PER_MINUTE
+OLLAMA_URL  = "http://localhost:11434/api/chat"
+MODEL_NAME  = "qwen2.5:3b"
 
-# If the pipeline crashes, it picks up where it left off
-CHECKPOINT_FILE = Path("pipeline_checkpoint.json")
-CHECKPOINT_INTERVAL = 50  # Save progress every 50 PDFs
+# ── Tuning knobs for 4GB VRAM ──
+NUM_CTX           = 2048        # ⬇ from 4096 — halves VRAM for context
+FRONT_CHARS       = 1500        # ⬇ from 3000 — less input = faster inference
+BACK_CHARS        = 1000        # ⬇ from 2000
+MAX_INPUT_CHARS   = 2000        # Hard cap on what we send to LLM
+PDF_READ_WORKERS  = 4           # Parallel PDF text extraction
+LLM_TIMEOUT       = 90          # Seconds before we abandon a call
+LLM_RETRIES       = 2           # Retry on failure
+MIN_TEXT_LENGTH    = 200         # Skip near-empty PDFs
+MAX_PDFS           = None       # Set to int to limit, None for all
+
+# ─────────────────────────────────────────
+# Lazy-loaded embedding model
+# ─────────────────────────────────────────
+_embedder = None
+
+def get_embedder():
+    global _embedder
+    if _embedder is None:
+        logger.info("Loading embedding model (one-time)...")
+        _embedder = SentenceTransformer('all-MiniLM-L6-v2')
+    return _embedder
 
 
+# ─────────────────────────────────────────
+# PDF Reading (parallelizable, no GPU)
+# ─────────────────────────────────────────
 def read_pdf(filepath: Path) -> str:
-    """Extract text from PDF."""
+    """Extract text from PDF — optimized to stop early."""
     try:
         with open(filepath, 'rb') as f:
             reader = PyPDF2.PdfReader(f)
-            text = ""
+            chunks = []
+            char_count = 0
+            target = FRONT_CHARS + BACK_CHARS + 500  # slight buffer
+
+            # Read only as many pages as we need for the front
             for page in reader.pages:
                 extracted = page.extract_text()
                 if extracted:
-                    text += extracted + "\n"
-            return text
+                    chunks.append(extracted)
+                    char_count += len(extracted)
+                # Once we have enough for front+back, stop reading middle pages
+                # But we still need the LAST pages, so read all if short doc
+                if char_count > target and len(reader.pages) > 20:
+                    # Grab last few pages for the "back" portion
+                    for p in reader.pages[-4:]:
+                        ext = p.extract_text()
+                        if ext:
+                            chunks.append(ext)
+                    break
+
+            return "\n".join(chunks)
     except Exception as e:
-        logger.warning(f"Failed to read {filepath}: {e}")
+        logger.warning(f"Failed to read {filepath.name}: {e}")
         return ""
 
 
-def extract_strategic_text(full_text: str, front_chars=3000, back_chars=2000) -> str:
+def read_pdfs_parallel(pdf_paths: list) -> dict:
+    """Read multiple PDFs in parallel (I/O bound, no GPU)."""
+    results = {}
+    with ThreadPoolExecutor(max_workers=PDF_READ_WORKERS) as executor:
+        future_to_path = {
+            executor.submit(read_pdf, p): p for p in pdf_paths
+        }
+        for future in as_completed(future_to_path):
+            path = future_to_path[future]
+            try:
+                results[path] = future.result()
+            except Exception as e:
+                logger.warning(f"PDF read error {path.name}: {e}")
+                results[path] = ""
+    return results
+
+
+# ─────────────────────────────────────────
+# Strategic Text Extraction
+# ─────────────────────────────────────────
+def extract_strategic_text(full_text: str) -> str:
     """
-    Extract the most informative parts of a judgment.
-    
-    WHY this works:
-    - First ~3000 chars: Contains case name, parties, the legal question,
-      and often the bench composition
-    - Last ~2000 chars: Contains the HOLDING, the ORDER, and the disposition
-      ("appeal allowed", "petition dismissed", etc.)
-    
-    This is FAR more useful than a random middle section, and keeps
-    token usage manageable (~1500 tokens per call).
+    Extract the most informative parts, capped to MAX_INPUT_CHARS.
+    Court judgments: header has parties/statutes, tail has the holding.
     """
-    if len(full_text) <= front_chars + back_chars:
-        return full_text
-    
-    front = full_text[:front_chars]
-    back = full_text[-back_chars:]
-    
-    return f"{front}\n\n[... MIDDLE OF JUDGMENT OMITTED ...]\n\n{back}"
+    text = full_text.strip()
+    if not text:
+        return ""
+
+    if len(text) <= MAX_INPUT_CHARS:
+        return text
+
+    front = text[:FRONT_CHARS]
+    back  = text[-BACK_CHARS:]
+
+    combined = f"{front}\n\n[...]\n\n{back}"
+
+    # Hard cap — if still too long, truncate
+    if len(combined) > MAX_INPUT_CHARS:
+        combined = combined[:MAX_INPUT_CHARS]
+
+    return combined
+
+
+# ─────────────────────────────────────────
+# LLM Extraction (Ollama) — Leaner Prompt
+# ─────────────────────────────────────────
+
+# Shorter prompt = fewer tokens for the model to process = faster
+SYSTEM_PROMPT = "Extract structured legal metadata from Indian court judgments. Output valid JSON only."
+
+USER_PROMPT_TEMPLATE = """Extract a case card from this Indian judgment excerpt. 
+Focus on what the COURT HELD.
+
+Excerpt:
+{text}
+
+Return JSON:
+{{
+  "case_title": "X v. Y",
+  "court": "court name",
+  "legal_domain": "Constitutional|Criminal|Civil|Tax|Labour|Environmental|Commercial|Family|Property|Administrative|Other",
+  "key_statutes": ["statutes"],
+  "core_legal_question": "one sentence",
+  "holding": "2-3 sentences",
+  "key_principles": ["principles"],
+  "searchable_summary": "3-4 sentence summary for lawyer search"
+}}"""
 
 
 def extract_case_card(text: str, file_path: str) -> dict:
-    """
-    Use LLM to extract a structured case card from judgment text.
-    
-    This is the KEY innovation: instead of embedding raw judgment text
-    (which is noisy and contains opposing arguments), we extract a 
-    clean, structured summary that captures WHAT THE COURT ACTUALLY HELD.
-    """
-    prompt = f"""You are a legal research assistant. Read this excerpt from an Indian court judgment and extract a structured case card.
-
-IMPORTANT INSTRUCTIONS:
-1. Focus on what the COURT HELD, not what parties argued
-2. Identify the core legal principle (ratio decidendi)
-3. List the specific legal provisions interpreted
-4. Write the searchable summary as if a lawyer would search for this case
-
-Judgment excerpt:
-{text}
-
-Respond ONLY with this JSON structure:
-{{
-    "case_title": "Petitioner Name v. Respondent Name",
-    "court": "Supreme Court of India" or "High Court of [State]",
-    "legal_domain": "One of: Constitutional, Criminal, Civil, Tax, Labour, Environmental, Commercial, Family, Property, Administrative, Other",
-    "key_statutes": ["Article 21", "Section 302 IPC", etc.],
-    "core_legal_question": "One sentence describing the legal issue decided",
-    "holding": "2-3 sentences on what the court actually held/decided",
-    "key_principles": ["Principle 1 established", "Principle 2 established"],
-    "searchable_summary": "A 3-4 sentence natural language summary combining the legal question, the holding, and the principles. Write this as if explaining to a lawyer what this case is useful for."
-}}"""
-
-    try:
-        response = client.chat.completions.create(
-            model="llama-3.3-70b-versatile",
-            messages=[
-                {
-                    "role": "system", 
-                    "content": "You extract structured legal metadata from court judgments. Output valid JSON only."
-                },
-                {"role": "user", "content": prompt}
-            ],
-            response_format={"type": "json_object"},
-            temperature=0.0,
-            max_tokens=800
-        )
-        
-        card = json.loads(response.choices[0].message.content)
-        card["source_file"] = str(file_path)
-        return card
-        
-    except Exception as e:
-        logger.error(f"LLM extraction failed for {file_path}: {e}")
-        return {
-            "case_title": "EXTRACTION_FAILED",
-            "source_file": str(file_path),
-            "searchable_summary": "",
-            "error": str(e)
+    """Call Ollama with retry logic and tight timeouts."""
+    payload = {
+        "model": MODEL_NAME,
+        "messages": [
+            {"role": "system", "content": SYSTEM_PROMPT},
+            {"role": "user",   "content": USER_PROMPT_TEMPLATE.format(text=text)}
+        ],
+        "format": "json",
+        "stream": False,
+        "options": {
+            "temperature": 0.0,
+            "num_ctx": NUM_CTX,        # Key VRAM saver
+            "num_predict": 512,        # ← Cap output tokens (cards are short)
         }
+    }
+
+    for attempt in range(1, LLM_RETRIES + 1):
+        try:
+            t0 = time()
+            response = requests.post(
+                OLLAMA_URL, json=payload, timeout=LLM_TIMEOUT
+            )
+            response.raise_for_status()
+            elapsed = time() - t0
+
+            content = response.json().get("message", {}).get("content", "{}")
+            card = json.loads(content)
+            card["source_file"] = str(file_path)
+            card["_llm_time_s"] = round(elapsed, 1)
+
+            logger.info(f"  ✅ {Path(file_path).name} ({elapsed:.1f}s)")
+            return card
+
+        except requests.exceptions.Timeout:
+            logger.warning(
+                f"  ⏱️ Timeout attempt {attempt}/{LLM_RETRIES} for {Path(file_path).name}"
+            )
+            if attempt < LLM_RETRIES:
+                sleep(2)
+
+        except json.JSONDecodeError as e:
+            logger.warning(f"  ⚠️ Bad JSON from LLM for {Path(file_path).name}: {e}")
+            # Try to salvage partial JSON
+            try:
+                # Sometimes LLM outputs markdown-wrapped JSON
+                match = re.search(r'\{.*\}', content, re.DOTALL)
+                if match:
+                    card = json.loads(match.group())
+                    card["source_file"] = str(file_path)
+                    card["_llm_time_s"] = round(time() - t0, 1)
+                    return card
+            except:
+                pass
+
+        except Exception as e:
+            logger.error(f"  ❌ Attempt {attempt}/{LLM_RETRIES} failed: {e}")
+            if attempt < LLM_RETRIES:
+                sleep(2)
+
+    return {
+        "case_title": "EXTRACTION_FAILED",
+        "source_file": str(file_path),
+        "searchable_summary": "",
+        "error": "All retries exhausted"
+    }
 
 
+# ─────────────────────────────────────────
+# Checkpoint Management
+# ─────────────────────────────────────────
 def load_checkpoint() -> dict:
-    """Load pipeline progress so we can resume after crashes."""
     if CHECKPOINT_FILE.exists():
         with open(CHECKPOINT_FILE, 'r') as f:
             return json.load(f)
@@ -148,121 +243,166 @@ def load_checkpoint() -> dict:
 
 
 def save_checkpoint(state: dict):
-    """Save pipeline progress."""
-    with open(CHECKPOINT_FILE, 'w') as f:
+    # Write to temp file first, then rename (atomic on most OS)
+    tmp = CHECKPOINT_FILE.with_suffix('.tmp')
+    with open(tmp, 'w') as f:
         json.dump(state, f)
+    tmp.replace(CHECKPOINT_FILE)
 
+
+# ─────────────────────────────────────────
+# PDF Discovery
+# ─────────────────────────────────────────
+SKIP_DIRS = {'venv', 'frontend', '.git', 'node_modules', '__pycache__', '.venv'}
 
 def discover_all_pdfs() -> list:
-    """Find all judgment PDFs on disk."""
     all_pdfs = []
     for pdf_path in Path('.').rglob('*.pdf'):
-        # Skip virtual environment and frontend files
-        if any(skip in pdf_path.parts for skip in ['venv', 'frontend', '.git', 'node_modules']):
+        if SKIP_DIRS & set(pdf_path.parts):
             continue
         all_pdfs.append(pdf_path)
-    
     logger.info(f"Found {len(all_pdfs)} PDF files")
     return sorted(all_pdfs)
 
 
+# ─────────────────────────────────────────
+# Main Pipeline
+# ─────────────────────────────────────────
 def build_index():
-    """Main pipeline: Process all PDFs → Case Cards → Embeddings."""
-    
+    t_start = time()
     print("=" * 60)
-    print("  CASE INTELLIGENCE LAYER - OFFLINE BUILDER")
+    print("  CASE INTELLIGENCE LAYER — OPTIMIZED OLLAMA BUILDER")
     print("=" * 60)
-    
-    # 1. Discover all PDFs
+
+    # ── 1. Discover PDFs ──
     all_pdfs = discover_all_pdfs()
-    all_pdfs = all_pdfs[:50]
+    all_pdfs = all_pdfs[:5]
+    if MAX_PDFS:
+        all_pdfs = all_pdfs[:MAX_PDFS]
     if not all_pdfs:
         print("❌ No PDFs found. Exiting.")
         return
-    
-    # 2. Load checkpoint (resume capability)
+
+    # ── 2. Resume from checkpoint ──
     state = load_checkpoint()
     processed_set = set(state["processed_files"])
     cards = state["cards"]
-    
+
     remaining = [p for p in all_pdfs if str(p) not in processed_set]
     print(f"\n📊 Total PDFs: {len(all_pdfs)}")
     print(f"✅ Already processed: {len(processed_set)}")
     print(f"📝 Remaining: {len(remaining)}")
-    print(f"⏱️  Estimated time: {len(remaining) * DELAY_BETWEEN_REQUESTS / 60:.1f} minutes")
-    print()
-    
-    # 3. Process each PDF
-    for i, pdf_path in enumerate(remaining):
-        logger.info(f"[{i+1}/{len(remaining)}] Processing: {pdf_path.name}")
-        
-        # Extract text
-        full_text = read_pdf(pdf_path)
-        if not full_text.strip() or len(full_text) < 200:
-            logger.warning(f"  ⚠️ Insufficient text, skipping")
-            processed_set.add(str(pdf_path))
-            continue
-        
-        # Get strategic excerpt
-        excerpt = extract_strategic_text(full_text)
-        
-        # Extract case card via LLM
-        card = extract_case_card(excerpt, str(pdf_path))
-        cards.append(card)
-        processed_set.add(str(pdf_path))
-        
-        # Checkpoint
-        if (i + 1) % CHECKPOINT_INTERVAL == 0:
+    print(f"⚙️  Config: num_ctx={NUM_CTX}, input≤{MAX_INPUT_CHARS} chars, "
+          f"output≤512 tokens\n")
+
+    if not remaining:
+        print("Nothing to process. Building embeddings from existing cards...")
+    else:
+        # ── 3. Pre-read PDFs in parallel batches ──
+        BATCH_SIZE = 20  # Read 20 PDFs at a time in parallel
+        for batch_start in range(0, len(remaining), BATCH_SIZE):
+            batch = remaining[batch_start : batch_start + BATCH_SIZE]
+            batch_num = batch_start // BATCH_SIZE + 1
+            total_batches = (len(remaining) + BATCH_SIZE - 1) // BATCH_SIZE
+
+            print(f"\n── Batch {batch_num}/{total_batches} "
+                  f"({len(batch)} PDFs) ──")
+
+            # Parallel PDF reading
+            logger.info("Reading PDFs in parallel...")
+            pdf_texts = read_pdfs_parallel(batch)
+
+            # Sequential LLM calls (GPU is the bottleneck, can't parallelize)
+            for pdf_path in batch:
+                full_text = pdf_texts.get(pdf_path, "")
+                if not full_text.strip() or len(full_text) < MIN_TEXT_LENGTH:
+                    logger.warning(f"  ⚠️ Skipping {pdf_path.name} (insufficient text)")
+                    processed_set.add(str(pdf_path))
+                    continue
+
+                excerpt = extract_strategic_text(full_text)
+                card = extract_case_card(excerpt, str(pdf_path))
+                cards.append(card)
+                processed_set.add(str(pdf_path))
+
+            # Checkpoint after every batch
             state["processed_files"] = list(processed_set)
             state["cards"] = cards
             save_checkpoint(state)
-            print(f"  💾 Checkpoint saved ({len(cards)} cards so far)")
-        
-        # Rate limiting
-        time.sleep(DELAY_BETWEEN_REQUESTS)
-    
-    # 4. Save final case cards
+            
+            successful = sum(1 for c in cards if c.get("case_title") != "EXTRACTION_FAILED")
+            print(f"  💾 Checkpoint: {successful}/{len(cards)} successful cards")
+
+    # ── 4. Save case cards ──
+    if not cards:
+        print("❌ No cards extracted. Exiting.")
+        return
+
     print(f"\n📦 Saving {len(cards)} case cards...")
     cards_df = pd.DataFrame(cards)
-    cards_df.to_parquet(OUTPUT_CARDS, index=False)
-    print(f"  ✅ Saved to {OUTPUT_CARDS}")
+    # cards_df.to_parquet(OUTPUT_CARDS, index=False)
     
-    # 5. Build embeddings for the searchable_summary field
+    string_cols = ['case_title', 'court', 'legal_domain', 'core_legal_question', 'holding', 'searchable_summary', 'error', 'source_file']
+    list_cols = ['key_statutes', 'key_principles']
+    
+    for col in string_cols:
+        if col in cards_df.columns:
+            # Convert accidental lists to joined strings, and handle NaNs
+            cards_df[col] = cards_df[col].apply(lambda x: " ".join(x) if isinstance(x, list) else str(x) if pd.notna(x) else "")
+            
+    for col in list_cols:
+        if col in cards_df.columns:
+            # Convert accidental strings to lists
+            cards_df[col] = cards_df[col].apply(lambda x: [x] if isinstance(x, str) else x if isinstance(x, list) else [])
+    # -------------------------------------------------------
+
+    cards_df.to_parquet(OUTPUT_CARDS, index=False)
+    print(f"  ✅ {OUTPUT_CARDS}")
+
+    # ── 5. Build embeddings ──
     print(f"\n🧠 Building embeddings...")
     summaries = cards_df['searchable_summary'].fillna('').tolist()
-    
-    # Filter out empty summaries
     valid_mask = [bool(s.strip()) for s in summaries]
     valid_summaries = [s for s, v in zip(summaries, valid_mask) if v]
-    
+
     if valid_summaries:
-        # Batch encode for efficiency
+        embedder = get_embedder()
         embeddings = embedder.encode(
-            valid_summaries, 
-            show_progress_bar=True, 
-            batch_size=64
+            valid_summaries,
+            show_progress_bar=True,
+            batch_size=128,       # ⬆ from 64 — MiniLM is tiny, can handle it
+            normalize_embeddings=True  # Pre-normalize for cosine similarity
         )
-        
-        # Create full embedding matrix (with zeros for failed extractions)
-        full_embeddings = np.zeros((len(summaries), embeddings.shape[1]))
+
+        full_embeddings = np.zeros((len(summaries), embeddings.shape[1]),
+                                    dtype=np.float32)  # float32 not float64
         valid_idx = 0
         for i, v in enumerate(valid_mask):
             if v:
                 full_embeddings[i] = embeddings[valid_idx]
                 valid_idx += 1
-        
+
         np.save(OUTPUT_EMBEDDINGS, full_embeddings)
-        print(f"  ✅ Saved embeddings to {OUTPUT_EMBEDDINGS}")
-        print(f"  📐 Shape: {full_embeddings.shape}")
-    
-    # 6. Clean up checkpoint
+        print(f"  ✅ {OUTPUT_EMBEDDINGS} "
+              f"({full_embeddings.shape}, {full_embeddings.nbytes/1024/1024:.1f} MB)")
+
+    # ── 6. Cleanup ──
     if CHECKPOINT_FILE.exists():
         CHECKPOINT_FILE.unlink()
-    
+
+    elapsed = time() - t_start
+    successful = sum(1 for c in cards if c.get("case_title") != "EXTRACTION_FAILED")
+    failed = len(cards) - successful
+
+    # Timing stats
+    llm_times = [c.get("_llm_time_s", 0) for c in cards if c.get("_llm_time_s")]
+    avg_llm = np.mean(llm_times) if llm_times else 0
+
     print(f"\n{'=' * 60}")
     print(f"  ✅ PIPELINE COMPLETE")
-    print(f"  📊 {len(cards)} case cards generated")
-    print(f"  📊 {sum(valid_mask)} embeddings created")
+    print(f"  📊 {successful} successful / {failed} failed / {len(cards)} total")
+    print(f"  ⏱️  Total: {elapsed:.0f}s | Avg LLM call: {avg_llm:.1f}s")
+    print(f"  📂 {OUTPUT_CARDS} + {OUTPUT_EMBEDDINGS}")
     print(f"{'=' * 60}")
 
 
