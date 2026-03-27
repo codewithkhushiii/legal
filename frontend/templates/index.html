@@ -675,7 +675,7 @@
 
         .cards-grid {
             display: grid;
-            grid-template-columns: 1fr 1fr;
+            grid-template-columns: repeat(3, 1fr);
             gap: 2.5rem;
         }
 
@@ -1002,6 +1002,54 @@
 
         .tool-card.bail-card .card-glow-border {
             background: linear-gradient(135deg, var(--emerald-light), transparent 40%, transparent 60%, var(--emerald));
+        }
+
+        /* Case Research Card specifically */
+        .tool-card.research-card:hover {
+            border-color: rgba(139, 32, 53, 0.4);
+        }
+
+        .tool-card.research-card .card-icon-ring {
+            border-color: rgba(139, 32, 53, 0.2);
+        }
+
+        .tool-card.research-card:hover .card-icon-ring {
+            border-color: var(--crimson-light);
+            box-shadow: 0 0 30px var(--crimson-glow);
+        }
+
+        .tool-card.research-card:hover .card-title {
+            color: var(--crimson-light);
+        }
+
+        .tool-card.research-card .card-stat-number {
+            color: var(--crimson-light);
+        }
+
+        .tool-card.research-card .card-feature i {
+            color: var(--crimson-light);
+        }
+
+        .tool-card.research-card .cta-text {
+            color: var(--crimson-light);
+        }
+
+        .tool-card.research-card .cta-arrow {
+            background: var(--crimson-light);
+        }
+
+        .tool-card.research-card:hover .card-cta {
+            background: rgba(139, 32, 53, 0.08);
+            border-color: var(--crimson-light);
+            box-shadow: 0 0 30px var(--crimson-glow);
+        }
+
+        .tool-card.research-card::before {
+            background: linear-gradient(135deg, var(--crimson-glow) 0%, transparent 50%);
+        }
+
+        .tool-card.research-card .card-glow-border {
+            background: linear-gradient(135deg, var(--crimson-light), transparent 40%, transparent 60%, var(--crimson));
         }
 
         /* ============================================
@@ -1532,6 +1580,75 @@
                             </div>
                         </div>
                     </div>
+            <!-- CASE RESEARCH CARD -->
+            <a href="/case-research" class="tool-card research-card reveal reveal-delay-3" id="card-research">
+                    <div class="card-glow-border"></div>
+                    <div class="card-bg-pattern">
+                        <svg viewBox="0 0 200 200" fill="none" xmlns="http://www.w3.org/2000/svg">
+                            <circle cx="100" cy="100" r="30" stroke="currentColor" stroke-width="1"/>
+                            <path d="M100 0 L100 70 M100 130 L100 200 M0 100 L70 100 M130 100 L200 100" stroke="currentColor" stroke-width="0.5"/>
+                            <circle cx="100" cy="100" r="80" stroke="currentColor" stroke-width="0.5" stroke-dasharray="4 4"/>
+                        </svg>
+                    </div>
+                    <div class="card-header">
+                        <div class="card-icon-area">
+                            <div class="card-icon-ring"></div>
+                            <div class="card-icon-symbol">🧠</div>
+                        </div>
+                        <div class="card-number">Module III — Case Intelligence</div>
+                        <h3 class="card-title">Case Research</h3>
+                        <p class="card-subtitle">
+                            Semantic search across our entire database to find cases matching your scenario.
+                            Build comprehensive litigation strategies and anticipate counter-arguments 
+                            using advanced LLM analysis on relevant precedents.
+                        </p>
+                    </div>
+                    <div class="card-body">
+                        <div class="card-features">
+                            <div class="card-feature">
+                                <i class="fas fa-check"></i>
+                                <span>Natural language semantic case search</span>
+                            </div>
+                            <div class="card-feature">
+                                <i class="fas fa-check"></i>
+                                <span>Domain and statute-specific filtering</span>
+                            </div>
+                            <div class="card-feature">
+                                <i class="fas fa-check"></i>
+                                <span>AI-extracted core legal questions & principles</span>
+                            </div>
+                            <div class="card-feature">
+                                <i class="fas fa-check"></i>
+                                <span>LLM argument reinforcement against counter-claims</span>
+                            </div>
+                            <div class="card-feature">
+                                <i class="fas fa-check"></i>
+                                <span>Automated multi-precedent strategy building</span>
+                            </div>
+                        </div>
+                        <div class="card-stats">
+                            <div class="card-stat">
+                                <div class="card-stat-number" id="stat-cases-intel">—</div>
+                                <div class="card-stat-label">Indexed Cases</div>
+                            </div>
+                            <div class="card-stat">
+                                <div class="card-stat-number">AI</div>
+                                <div class="card-stat-label">Strategy Engine</div>
+                            </div>
+                            <div class="card-stat">
+                                <div class="card-stat-number">RAG</div>
+                                <div class="card-stat-label">Embeddings</div>
+                            </div>
+                        </div>
+                    </div>
+                    <div class="card-footer">
+                        <div class="card-cta">
+                            <span class="cta-text">Enter Research Chamber</span>
+                            <div class="cta-arrow">
+                                <i class="fas fa-arrow-right"></i>
+                            </div>
+                        </div>
+                    </div>
                 </a>
             </div>
         </section>
@@ -1619,6 +1736,14 @@
             } catch (e) {
                 console.warn('Backend not reachable during boot:', e);
             }
+
+            try {
+                const intelResp = await fetch(`${API_BASE}/api/case-research/stats`);
+                const intelData = await intelResp.json();
+                if (intelData.loaded && intelData.total_cases) {
+                    animateCounter('stat-cases-intel', intelData.total_cases);
+                }
+            } catch (e) {}
 
             // Try to get bail reckoner stats
             try {

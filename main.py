@@ -50,6 +50,57 @@ class ReckonerRequest(BaseModel):
     risk_of_influence: bool
     served_half_term: bool
     
+# ==========================================
+# 6. Case Research / Similar Case Finder
+# ==========================================
+
+# --- Pydantic Models for Case Research ---
+class CaseResearchRequest(BaseModel):
+    case_description: str
+    legal_domain: Optional[str] = None
+    key_statutes: Optional[List[str]] = []
+    num_results: Optional[int] = 5
+
+class CaseDetailRequest(BaseModel):
+    source_file: str
+
+# --- Global state for case intelligence layer ---
+case_cards_df = pd.DataFrame()
+case_embeddings_matrix = None
+
+def load_case_intelligence():
+    """Load the case cards and embeddings built by build_case_index.py"""
+    global case_cards_df, case_embeddings_matrix
+
+    cards_path = Path("case_cards.parquet")
+    embeddings_path = Path("case_embeddings.npy")
+
+    if cards_path.exists():
+        try:
+            case_cards_df = pd.read_parquet(cards_path)
+            logger.info(f"📚 Loaded {len(case_cards_df)} case cards from {cards_path}")
+        except Exception as e:
+            logger.warning(f"⚠️ Could not load case cards: {e}")
+
+    if embeddings_path.exists():
+        try:
+            case_embeddings_matrix = np.load(embeddings_path)
+            logger.info(
+                f"🧠 Loaded case embeddings: {case_embeddings_matrix.shape} "
+                f"from {embeddings_path}"
+            )
+        except Exception as e:
+            logger.warning(f"⚠️ Could not load case embeddings: {e}")
+
+
+# --- Call this inside your lifespan function ---
+# Add this line inside the lifespan() async context manager, 
+# right after loading bail_df:
+#
+#   load_case_intelligence()
+
+
+
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     global df, bail_df
@@ -58,6 +109,9 @@ async def lifespan(app: FastAPI):
 
     for file_path in Path('.').rglob('*.parquet'):
         if 'venv' in file_path.parts:
+            continue
+        # Skip the case_cards.parquet — it's loaded separately
+        if file_path.name == 'case_cards.parquet':
             continue
         try:
             df_part = pd.read_parquet(file_path)
@@ -76,7 +130,6 @@ async def lifespan(app: FastAPI):
     else:
         print("❌ WARNING: No valid .parquet files were found. Search will fail.")
 
-    
     csv_path = Path("a.csv")
     if csv_path.exists():
         try:
@@ -86,6 +139,9 @@ async def lifespan(app: FastAPI):
             print(f"⚠️ Could not load Bail Reckoner CSV: {e}")
     else:
         print("❌ WARNING: bail_reckoner_database.csv not found.")
+
+    # Load Case Intelligence Layer
+    load_case_intelligence()
 
     yield
     print("🛑 Shutting down server...")
@@ -982,3 +1038,408 @@ Be direct and professional. Do not use markdown headers."""
         })
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"LLM Error: {str(e)}")
+    
+# ==========================================
+# Case Research Endpoints
+# ==========================================
+
+@app.get("/case-research", response_class=FileResponse)
+async def serve_case_research():
+    return FileResponse("frontend/templates/case-research.html")
+
+
+@app.get("/api/case-research/stats")
+def case_research_stats():
+    """Return stats about the case intelligence database."""
+    if case_cards_df.empty:
+        return {
+            "loaded": False,
+            "total_cases": 0,
+            "message": "Case intelligence database not loaded. Run build_case_index.py first."
+        }
+
+    domains = {}
+    if 'legal_domain' in case_cards_df.columns:
+        domain_counts = case_cards_df['legal_domain'].value_counts().to_dict()
+        domains = {str(k): int(v) for k, v in domain_counts.items()}
+
+    courts = {}
+    if 'court' in case_cards_df.columns:
+        court_counts = case_cards_df['court'].value_counts().head(10).to_dict()
+        courts = {str(k): int(v) for k, v in court_counts.items()}
+
+    return {
+        "loaded": True,
+        "total_cases": len(case_cards_df),
+        "embeddings_loaded": case_embeddings_matrix is not None,
+        "embedding_dimensions": (
+            int(case_embeddings_matrix.shape[1])
+            if case_embeddings_matrix is not None
+            else 0
+        ),
+        "domains": domains,
+        "courts": courts
+    }
+
+
+@app.post("/api/case-research/search")
+async def search_similar_cases(req: CaseResearchRequest):
+    """
+    Core search endpoint. Takes a lawyer's case description and finds
+    similar cases from the indexed database using semantic search.
+    """
+    if case_cards_df.empty or case_embeddings_matrix is None:
+        raise HTTPException(
+            status_code=503,
+            detail="Case intelligence database not loaded. Run build_case_index.py first."
+        )
+
+    if not req.case_description.strip():
+        raise HTTPException(status_code=400, detail="Case description cannot be empty.")
+
+    num_results = min(req.num_results or 5, 20)
+
+    # Build the search query combining all inputs
+    search_parts = [req.case_description.strip()]
+    if req.legal_domain:
+        search_parts.append(f"Legal domain: {req.legal_domain}")
+    if req.key_statutes:
+        search_parts.append(f"Relevant statutes: {', '.join(req.key_statutes)}")
+
+    search_query = " ".join(search_parts)
+
+    logger.info(f"🔍 Case research query: {search_query[:100]}...")
+
+    # ──────────────────────────────────────────────────
+    # FIX: Align case_cards and embeddings by row count
+    # The parquet may have more rows than embeddings (e.g., 
+    # failed extractions added after embedding was built).
+    # We only search over the rows that HAVE embeddings.
+    # ──────────────────────────────────────────────────
+    num_embedded = case_embeddings_matrix.shape[0]
+    num_cards = len(case_cards_df)
+
+    if num_embedded != num_cards:
+        logger.warning(
+            f"⚠️ Shape mismatch: {num_cards} cards vs {num_embedded} embeddings. "
+            f"Using first {num_embedded} cards only."
+        )
+
+    # Work with only the rows that have embeddings
+    search_df = case_cards_df.iloc[:num_embedded].copy()
+    search_embeddings = case_embeddings_matrix
+
+    # Encode the query
+    query_embedding = embedder.encode(
+        [search_query], normalize_embeddings=True
+    )
+
+    # Compute similarity against all case embeddings
+    similarities = cosine_similarity(query_embedding, search_embeddings)[0]
+
+    # Apply domain filter if specified (boost matching domain scores)
+    if req.legal_domain and 'legal_domain' in search_df.columns:
+        domain_mask = (
+            search_df['legal_domain']
+            .str.lower()
+            .eq(req.legal_domain.lower())
+            .values  # Convert to numpy array
+        )
+        similarities = np.where(domain_mask, similarities * 1.15, similarities)
+
+    # Apply statute filter (boost cases mentioning same statutes)
+    if req.key_statutes and 'key_statutes' in search_df.columns:
+        for statute in req.key_statutes:
+            statute_lower = statute.lower()
+            statute_mask = search_df['key_statutes'].apply(
+                lambda x: any(statute_lower in str(s).lower() for s in x)
+                if isinstance(x, list) else statute_lower in str(x).lower()
+            ).values  # Convert to numpy array
+            similarities = np.where(statute_mask, similarities * 1.10, similarities)
+
+    # Clip similarities to [0, 1] after boosting
+    similarities = np.clip(similarities, 0.0, 1.0)
+
+    # Get top results
+    top_indices = np.argsort(similarities)[-num_results:][::-1]
+
+    results = []
+    for idx in top_indices:
+        idx = int(idx)
+        score = float(similarities[idx])
+
+        if score < 0.15:
+            continue
+
+        row = search_df.iloc[idx]
+
+        # Determine relevance tier
+        if score >= 0.65:
+            relevance = "🟢 Highly Relevant"
+        elif score >= 0.45:
+            relevance = "🟡 Moderately Relevant"
+        else:
+            relevance = "🟠 Potentially Relevant"
+
+        # Build key_statutes safely
+        statutes = row.get('key_statutes', [])
+        if isinstance(statutes, str):
+            statutes = [statutes]
+        elif not isinstance(statutes, list):
+            statutes = []
+
+        principles = row.get('key_principles', [])
+        if isinstance(principles, str):
+            principles = [principles]
+        elif not isinstance(principles, list):
+            principles = []
+
+        results.append({
+            "rank": len(results) + 1,
+            "similarity_score": round(score, 4),
+            "relevance": relevance,
+            "case_title": str(row.get('case_title', 'Unknown')),
+            "court": str(row.get('court', 'Unknown')),
+            "legal_domain": str(row.get('legal_domain', 'Unknown')),
+            "core_legal_question": str(row.get('core_legal_question', '')),
+            "holding": str(row.get('holding', '')),
+            "key_principles": principles,
+            "key_statutes": statutes,
+            "searchable_summary": str(row.get('searchable_summary', '')),
+            "source_file": str(row.get('source_file', ''))
+        })
+
+    if not results:
+        return JSONResponse({
+            "status": "NO_RESULTS",
+            "message": "No sufficiently similar cases found. Try broadening your description.",
+            "results": [],
+            "query_used": search_query
+        })
+
+    return JSONResponse({
+        "status": "SUCCESS",
+        "total_results": len(results),
+        "query_used": search_query,
+        "results": results
+    })
+
+
+@app.post("/api/case-research/read-case")
+async def read_case_pdf(req: CaseDetailRequest):
+    """
+    Read the full PDF of a specific case and return its text content
+    so a lawyer can study it in detail.
+    """
+    if not req.source_file or not req.source_file.strip():
+        raise HTTPException(status_code=400, detail="No source file specified.")
+
+    source_path = req.source_file.strip()
+    logger.info(f"📖 Reading case PDF: {source_path}")
+
+    # Try multiple strategies to find and read the PDF
+    full_text = ""
+
+    # Strategy 1: Direct path
+    direct = Path(source_path)
+    if direct.exists() and direct.suffix == '.pdf':
+        full_text = _read_pdf(direct)
+
+    # Strategy 2: Use the existing extract function
+    if not full_text:
+        full_text = extract_text_from_pdf_path(source_path)
+
+    if not full_text.strip():
+        raise HTTPException(
+            status_code=404,
+            detail=f"Could not read PDF for: {source_path}"
+        )
+
+    return JSONResponse({
+        "status": "SUCCESS",
+        "source_file": source_path,
+        "text_length": len(full_text),
+        "full_text": full_text
+    })
+
+
+@app.post("/api/case-research/analyze-for-argument")
+async def analyze_case_for_argument(payload: dict):
+    """
+    Given a lawyer's case description and a specific found case,
+    use LLM to analyze how the found case can strengthen the lawyer's argument.
+    """
+    case_description = payload.get("case_description", "")
+    found_case = payload.get("found_case", {})
+    case_text = payload.get("case_text", "")
+
+    if not case_description or not found_case:
+        raise HTTPException(
+            status_code=400,
+            detail="Both case_description and found_case are required."
+        )
+
+    # Build context from the found case
+    case_context = f"""
+Case Title: {found_case.get('case_title', 'Unknown')}
+Court: {found_case.get('court', 'Unknown')}
+Legal Domain: {found_case.get('legal_domain', 'Unknown')}
+Core Legal Question: {found_case.get('core_legal_question', '')}
+Holding: {found_case.get('holding', '')}
+Key Principles: {', '.join(found_case.get('key_principles', []))}
+Summary: {found_case.get('searchable_summary', '')}
+"""
+
+    # If we have the full text, add relevant excerpts
+    text_section = ""
+    if case_text:
+        # Take first 3000 and last 2000 chars for the LLM
+        if len(case_text) > 5000:
+            text_section = (
+                f"\n\nRelevant excerpts from the judgment:\n"
+                f"{case_text[:3000]}\n\n[...]\n\n{case_text[-2000:]}"
+            )
+        else:
+            text_section = f"\n\nFull judgment text:\n{case_text}"
+
+    prompt = f"""You are a senior legal strategist helping a lawyer prepare their case.
+
+THE LAWYER'S CURRENT CASE:
+{case_description}
+
+A SIMILAR PRECEDENT WAS FOUND:
+{case_context}
+{text_section}
+
+YOUR TASK:
+Analyze how this precedent can be used to STRENGTHEN the lawyer's case. Provide:
+
+1. **Relevance Assessment**: How closely does this precedent relate to the lawyer's case? What are the key similarities?
+
+2. **Key Arguments to Extract**: What specific legal principles, holdings, or reasoning from this case can the lawyer cite?
+
+3. **How to Use This Case**: Concrete suggestions on how to frame arguments using this precedent. Include sample argument language.
+
+4. **Distinguishing Factors**: Any differences between the precedent and the current case that opposing counsel might raise, and how to address them.
+
+5. **Supporting Ratio Decidendi**: The core legal rationale that would be most persuasive if cited.
+
+Be specific, practical, and actionable. Write as if advising a practicing lawyer."""
+
+    try:
+        response = client.chat.completions.create(
+            model="llama-3.3-70b-versatile",
+            messages=[
+                {
+                    "role": "system",
+                    "content": (
+                        "You are a senior legal strategist specializing in Indian "
+                        "jurisprudence. You help lawyers build stronger cases by "
+                        "analyzing precedents and crafting compelling arguments."
+                    )
+                },
+                {"role": "user", "content": prompt}
+            ],
+            temperature=0.3,
+            max_tokens=1500
+        )
+
+        return JSONResponse({
+            "status": "SUCCESS",
+            "analysis": response.choices[0].message.content,
+            "case_used": found_case.get('case_title', 'Unknown')
+        })
+
+    except Exception as e:
+        raise HTTPException(
+            status_code=500,
+            detail=f"LLM analysis error: {str(e)}"
+        )
+
+
+@app.post("/api/case-research/build-strategy")
+async def build_case_strategy(payload: dict):
+    """
+    Given the lawyer's case and multiple similar cases found,
+    build a comprehensive litigation strategy.
+    """
+    case_description = payload.get("case_description", "")
+    similar_cases = payload.get("similar_cases", [])
+
+    if not case_description or not similar_cases:
+        raise HTTPException(
+            status_code=400,
+            detail="Both case_description and similar_cases are required."
+        )
+
+    # Format similar cases for the LLM
+    cases_summary = ""
+    for i, case in enumerate(similar_cases[:7], 1):
+        cases_summary += f"""
+--- Precedent {i} ---
+Title: {case.get('case_title', 'Unknown')}
+Court: {case.get('court', 'Unknown')}
+Domain: {case.get('legal_domain', 'Unknown')}
+Core Question: {case.get('core_legal_question', '')}
+Holding: {case.get('holding', '')}
+Principles: {', '.join(case.get('key_principles', []))}
+Relevance Score: {case.get('similarity_score', 0)}
+"""
+
+    prompt = f"""You are a senior litigation strategist preparing a comprehensive case strategy.
+
+THE LAWYER'S CASE:
+{case_description}
+
+RELEVANT PRECEDENTS FOUND ({len(similar_cases)} cases):
+{cases_summary}
+
+Generate a COMPREHENSIVE LITIGATION STRATEGY that includes:
+
+1. **Case Strength Assessment**: Overall strength of the case based on available precedents (Strong/Moderate/Weak with reasoning)
+
+2. **Primary Arguments** (ranked by strength):
+   - For each argument, cite which precedent(s) support it
+   - Include the legal principle and how it applies
+
+3. **Chain of Precedents**: How to build a logical chain linking multiple precedents to create a compelling narrative
+
+4. **Anticipated Counter-Arguments**: What the opposing side is likely to argue, and how to rebut using the precedents found
+
+5. **Recommended Citation Order**: The order in which to present these precedents for maximum impact
+
+6. **Key Phrases to Use**: Specific legal phrases from the precedents that the lawyer should quote
+
+7. **Risk Assessment**: Any gaps in the precedent support and how to mitigate them
+
+Be thorough, strategic, and practical. This should serve as an actionable litigation playbook."""
+
+    try:
+        response = client.chat.completions.create(
+            model="llama-3.3-70b-versatile",
+            messages=[
+                {
+                    "role": "system",
+                    "content": (
+                        "You are India's top litigation strategist. You build "
+                        "winning case strategies by masterfully weaving together "
+                        "precedents, statutes, and legal principles."
+                    )
+                },
+                {"role": "user", "content": prompt}
+            ],
+            temperature=0.3,
+            max_tokens=2500
+        )
+
+        return JSONResponse({
+            "status": "SUCCESS",
+            "strategy": response.choices[0].message.content,
+            "precedents_used": len(similar_cases)
+        })
+
+    except Exception as e:
+        raise HTTPException(
+            status_code=500,
+            detail=f"Strategy generation error: {str(e)}"
+        )

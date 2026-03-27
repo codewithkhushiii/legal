@@ -1,0 +1,888 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>🧠 Case Intelligence — Strategy & Research Engine</title>
+    <link href="https://fonts.googleapis.com/css2?family=Playfair+Display:ital,wght@0,400;0,500;0,600;0,700;0,800;0,900;1,400;1,500&family=Cormorant+Garamond:ital,wght@0,300;0,400;0,500;0,600;0,700;1,300;1,400;1,500&family=JetBrains+Mono:wght@300;400;500;600;700&family=Inter:wght@300;400;500;600;700;800&display=swap" rel="stylesheet">
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.0/css/all.min.css">
+    <style>
+        :root {
+            --bg-deepest: #0a0a0f;
+            --bg-dark: #0d0d14;
+            --bg-panel: #111118;
+            --bg-card: #16161f;
+            --bg-elevated: #1a1a25;
+            --bg-hover: #1e1e2a;
+            --gold: #c9a84c;
+            --gold-light: #e8d48b;
+            --gold-dark: #8b6914;
+            --gold-glow: rgba(201, 168, 76, 0.15);
+            --gold-glow-strong: rgba(201, 168, 76, 0.35);
+            --crimson: #8b2035;
+            --crimson-light: #c4445a;
+            --crimson-glow: rgba(196, 68, 90, 0.2);
+            --emerald: #1a7a4c;
+            --emerald-light: #4caf8a;
+            --amber: #b8860b;
+            --amber-light: #e8b877;
+            --text-primary: #e8e4dc;
+            --text-secondary: #9a9488;
+            --text-muted: #5a5650;
+            --border-subtle: rgba(201, 168, 76, 0.08);
+            --border-gold: rgba(201, 168, 76, 0.2);
+            --border-strong: rgba(201, 168, 76, 0.35);
+            --font-display: 'Playfair Display', serif;
+            --font-body: 'Cormorant Garamond', serif;
+            --font-ui: 'Inter', sans-serif;
+            --font-mono: 'JetBrains Mono', monospace;
+        }
+
+        *, *::before, *::after { margin: 0; padding: 0; box-sizing: border-box; }
+
+        body {
+            background: var(--bg-deepest);
+            color: var(--text-primary);
+            font-family: var(--font-body);
+            min-height: 100vh;
+            overflow-x: hidden;
+        }
+
+        .hidden { display: none !important; }
+
+        .bg-grid {
+            position: fixed; inset: 0; z-index: 0;
+            background-image:
+                linear-gradient(rgba(196,68,90,0.015) 1px, transparent 1px),
+                linear-gradient(90deg, rgba(196,68,90,0.015) 1px, transparent 1px);
+            background-size: 80px 80px;
+            pointer-events: none;
+        }
+
+        /* ── Header ── */
+        .page-header {
+            position: sticky; top: 0; z-index: 100;
+            background: rgba(10,10,15,0.92);
+            backdrop-filter: blur(30px);
+            border-bottom: 1px solid var(--border-subtle);
+            padding: 0 2rem;
+        }
+
+        .header-inner {
+            max-width: 1400px; margin: 0 auto;
+            height: 65px; display: flex;
+            align-items: center; justify-content: space-between;
+        }
+
+        .header-left {
+            display: flex; align-items: center; gap: 1rem;
+        }
+
+        .back-btn {
+            display: flex; align-items: center; gap: 0.5rem;
+            text-decoration: none; color: var(--text-secondary);
+            font-family: var(--font-ui); font-size: 0.75rem;
+            letter-spacing: 1px; text-transform: uppercase;
+            padding: 0.4rem 0.8rem; border: 1px solid var(--border-subtle);
+            border-radius: 4px; transition: all 0.3s ease;
+        }
+
+        .back-btn:hover {
+            color: var(--crimson-light); border-color: var(--crimson-glow);
+        }
+
+        .page-title {
+            font-family: var(--font-display);
+            font-size: 1.1rem; font-weight: 700;
+            color: var(--crimson-light);
+            letter-spacing: 2px; text-transform: uppercase;
+        }
+
+        .header-right {
+            display: flex; align-items: center; gap: 0.75rem;
+        }
+
+        .db-status {
+            display: flex; align-items: center; gap: 0.4rem;
+            font-family: var(--font-mono); font-size: 0.55rem;
+            letter-spacing: 0.5px;
+            padding: 0.3rem 0.6rem;
+            border-radius: 4px;
+            background: rgba(255,255,255,0.03);
+            border: 1px solid var(--border-subtle);
+        }
+
+        /* ── Main Layout ── */
+        .main-container {
+            position: relative; z-index: 1;
+            max-width: 1400px; margin: 0 auto;
+            padding: 2.5rem 2rem;
+            display: grid;
+            grid-template-columns: 350px 1fr;
+            gap: 2rem;
+            align-items: start;
+        }
+
+        /* ── Sidebar / Search Panel ── */
+        .search-panel {
+            background: var(--bg-panel);
+            border: 1px solid var(--border-subtle);
+            border-radius: 12px;
+            padding: 2rem;
+            position: sticky;
+            top: 90px;
+        }
+
+        .panel-heading {
+            display: flex; align-items: center; gap: 0.75rem;
+            margin-bottom: 2rem; padding-bottom: 1rem;
+            border-bottom: 1px solid var(--border-subtle);
+        }
+
+        .panel-icon {
+            width: 40px; height: 40px;
+            border: 1.5px solid var(--crimson-light);
+            border-radius: 50%; display: flex;
+            align-items: center; justify-content: center;
+            font-size: 1.1rem; color: var(--crimson-light);
+        }
+
+        .panel-heading h2 {
+            font-family: var(--font-display);
+            font-size: 1.2rem; font-weight: 700;
+            color: var(--text-primary); letter-spacing: 1px;
+        }
+
+        .form-group { margin-bottom: 1.5rem; }
+
+        .form-label {
+            display: block; font-family: var(--font-ui);
+            font-size: 0.7rem; font-weight: 600;
+            letter-spacing: 1.5px; text-transform: uppercase;
+            color: var(--text-secondary); margin-bottom: 0.5rem;
+        }
+
+        .form-input, .form-textarea, .form-select {
+            width: 100%; padding: 0.75rem 1rem;
+            background: var(--bg-card);
+            border: 1px solid var(--border-subtle);
+            border-radius: 6px; color: var(--text-primary);
+            font-family: var(--font-ui); font-size: 0.85rem;
+            transition: all 0.3s ease; outline: none;
+        }
+
+        .form-textarea { resize: vertical; min-height: 100px; line-height: 1.5; }
+
+        .form-input:focus, .form-textarea:focus, .form-select:focus {
+            border-color: var(--crimson-light);
+            box-shadow: 0 0 20px var(--crimson-glow);
+        }
+
+        .form-hint {
+            font-family: var(--font-ui); font-size: 0.6rem;
+            color: var(--text-muted); margin-top: 0.4rem;
+            line-height: 1.4; font-style: italic;
+        }
+
+        .btn-primary {
+            width: 100%; padding: 1rem;
+            background: linear-gradient(135deg, var(--crimson), var(--crimson-light));
+            border: none; border-radius: 8px;
+            color: white; font-family: var(--font-display);
+            font-size: 1rem; font-weight: 700;
+            letter-spacing: 2px; text-transform: uppercase;
+            cursor: pointer; position: relative;
+            overflow: hidden; transition: all 0.4s ease;
+            box-shadow: 0 4px 15px rgba(196,68,90,0.2);
+        }
+
+        .btn-primary:hover {
+            transform: translateY(-2px);
+            box-shadow: 0 8px 30px rgba(196,68,90,0.4);
+        }
+
+        .btn-primary:disabled {
+            opacity: 0.5; cursor: not-allowed; transform: none;
+        }
+
+        /* ── Content Area ── */
+        .content-area {
+            display: flex; flex-direction: column; gap: 2rem;
+        }
+
+        /* ── Top Bar within Content (Strategy Tools) ── */
+        .strategy-toolkit {
+            background: var(--bg-panel);
+            border: 1px solid var(--border-subtle);
+            border-radius: 12px; padding: 1.5rem;
+            display: flex; justify-content: space-between; align-items: center;
+        }
+
+        .toolkit-info {
+            display: flex; flex-direction: column; gap: 0.3rem;
+        }
+
+        .toolkit-title {
+            font-family: var(--font-display); font-size: 1.1rem;
+            color: var(--gold);
+        }
+
+        .toolkit-desc {
+            font-family: var(--font-ui); font-size: 0.75rem;
+            color: var(--text-secondary);
+        }
+
+        .btn-outline {
+            padding: 0.75rem 1.5rem;
+            background: transparent;
+            border: 1px solid var(--border-gold);
+            border-radius: 6px; color: var(--gold);
+            font-family: var(--font-ui); font-size: 0.75rem;
+            font-weight: 600; letter-spacing: 1px;
+            text-transform: uppercase; cursor: pointer;
+            transition: all 0.3s ease;
+        }
+
+        .btn-outline:hover:not(:disabled) {
+            background: rgba(201,168,76,0.1);
+            box-shadow: 0 0 20px var(--gold-glow);
+        }
+        
+        .btn-outline:disabled {
+            opacity: 0.5; cursor: not-allowed; border-color: var(--border-subtle); color: var(--text-muted);
+        }
+
+        /* ── Status View / Loader ── */
+        .status-pane {
+            background: var(--bg-panel);
+            border: 1px solid var(--border-subtle);
+            border-radius: 12px; min-height: 400px;
+            display: flex; flex-direction: column;
+            align-items: center; justify-content: center;
+            text-align: center; gap: 1.5rem;
+            padding: 3rem;
+        }
+
+        .status-icon {
+            font-size: 3.5rem;
+            background: -webkit-linear-gradient(135deg, var(--crimson-light), var(--gold));
+            background: linear-gradient(135deg, var(--crimson-light), var(--gold));
+            -webkit-background-clip: text;
+            background-clip: text;
+            -webkit-text-fill-color: transparent;
+        }
+
+        .status-icon.spin {
+            animation: pulse-spin 2s ease-in-out infinite;
+        }
+
+        @keyframes pulse-spin {
+            0% { transform: scale(1); filter: brightness(1); }
+            50% { transform: scale(1.1); filter: brightness(1.3); }
+            100% { transform: scale(1); filter: brightness(1); }
+        }
+
+        .status-text {
+            font-family: var(--font-display); font-size: 1.2rem;
+            color: var(--text-primary); letter-spacing: 1px;
+        }
+
+        .status-subtext {
+            font-family: var(--font-ui); font-size: 0.85rem;
+            color: var(--text-secondary); max-width: 400px; line-height: 1.6;
+        }
+
+        /* ── Results Container ── */
+        .results-list {
+            display: flex; flex-direction: column; gap: 1.5rem;
+        }
+
+        .case-card {
+            background: var(--bg-panel);
+            border: 1px solid var(--border-subtle);
+            border-radius: 12px; padding: 1.5rem;
+            transition: all 0.3s ease;
+            position: relative; overflow: hidden;
+        }
+
+        .case-card:hover {
+            border-color: var(--border-gold);
+            transform: translateY(-2px);
+            box-shadow: 0 10px 30px rgba(0,0,0,0.5);
+        }
+
+        .case-card-header {
+            display: flex; justify-content: space-between;
+            align-items: flex-start; margin-bottom: 1rem;
+        }
+
+        .case-meta {
+            display: flex; align-items: center; gap: 0.75rem;
+            margin-bottom: 0.5rem;
+        }
+
+        .case-domain {
+            padding: 0.2rem 0.5rem; border-radius: 4px;
+            font-family: var(--font-mono); font-size: 0.6rem;
+            background: rgba(139,32,53,0.15); color: var(--crimson-light);
+            border: 1px solid rgba(139,32,53,0.3); text-transform: uppercase;
+        }
+
+        .case-date {
+            font-family: var(--font-mono); font-size: 0.7rem;
+            color: var(--text-muted);
+        }
+
+        .case-similarity {
+            display: flex; align-items: center; gap: 0.4rem;
+            font-family: var(--font-mono); font-size: 0.75rem;
+            color: var(--gold-light);
+            background: rgba(201,168,76,0.1); padding: 0.3rem 0.6rem;
+            border-radius: 4px; border: 1px solid rgba(201,168,76,0.2);
+        }
+
+        .case-title {
+            font-family: var(--font-display); font-size: 1.4rem;
+            font-weight: 700; color: var(--text-primary);
+            line-height: 1.3; margin-bottom: 0.75rem;
+        }
+
+        .case-bench {
+            font-family: var(--font-ui); font-size: 0.75rem;
+            color: var(--text-secondary); margin-bottom: 1rem;
+            display: flex; align-items: center; gap: 0.5rem;
+        }
+
+        .case-summary {
+            font-family: var(--font-body); font-size: 1.05rem;
+            color: var(--text-secondary); line-height: 1.6;
+            margin-bottom: 1.5rem;
+            display: -webkit-box; -webkit-line-clamp: 3; line-clamp: 3;
+            -webkit-box-orient: vertical; overflow: hidden;
+        }
+
+        .case-statutes {
+            display: flex; flex-wrap: wrap; gap: 0.5rem; margin-bottom: 1.5rem;
+        }
+
+        .statute-badge {
+            font-family: var(--font-mono); font-size: 0.6rem;
+            padding: 0.2rem 0.5rem; border-radius: 3px;
+            background: var(--bg-elevated); color: var(--text-muted);
+            border: 1px solid var(--border-subtle);
+        }
+
+        .case-actions {
+            display: flex; gap: 1rem; border-top: 1px solid var(--border-subtle);
+            padding-top: 1rem;
+        }
+
+        .action-link {
+            font-family: var(--font-ui); font-size: 0.75rem;
+            font-weight: 600; color: var(--gold);
+            text-transform: uppercase; letter-spacing: 1px;
+            text-decoration: none; display: flex; align-items: center; gap: 0.4rem;
+            cursor: pointer; transition: color 0.3s;
+        }
+
+        .action-link:hover { color: var(--gold-light); }
+        .action-link.secondary { color: var(--text-muted); }
+        .action-link.secondary:hover { color: var(--text-primary); }
+
+        /* ── Modal Overlay ── */
+        .modal-overlay {
+            position: fixed; inset: 0; background: rgba(0,0,0,0.8);
+            backdrop-filter: blur(10px); z-index: 1000;
+            display: flex; align-items: center; justify-content: center;
+            opacity: 0; pointer-events: none; transition: opacity 0.3s ease;
+        }
+
+        .modal-overlay.active { opacity: 1; pointer-events: auto; }
+
+        .modal-content {
+            background: var(--bg-panel); border: 1px solid var(--border-gold);
+            border-radius: 12px; width: 90%; max-width: 800px;
+            max-height: 90vh; display: flex; flex-direction: column;
+            box-shadow: 0 20px 60px rgba(0,0,0,0.8), 0 0 40px var(--gold-glow);
+            transform: translateY(20px) scale(0.98);
+            transition: transform 0.3s cubic-bezier(0.175, 0.885, 0.32, 1.275);
+        }
+
+        .modal-overlay.active .modal-content { transform: translateY(0) scale(1); }
+
+        .modal-header {
+            padding: 1.5rem 2rem; border-bottom: 1px solid var(--border-subtle);
+            display: flex; justify-content: space-between; align-items: center;
+        }
+
+        .modal-title {
+            font-family: var(--font-display); font-size: 1.3rem;
+            font-weight: 700; color: var(--gold);
+        }
+
+        .modal-close {
+            background: transparent; border: none; color: var(--text-muted);
+            font-size: 1.2rem; cursor: pointer; transition: color 0.3s;
+        }
+        .modal-close:hover { color: var(--crimson-light); }
+
+        .modal-body {
+            padding: 2rem; overflow-y: auto;
+            font-family: var(--font-body); font-size: 1.05rem;
+            color: var(--text-primary); line-height: 1.7;
+        }
+
+        .modal-body pre {
+            white-space: pre-wrap; font-family: inherit; margin: 0;
+        }
+
+        /* Loading inside modal */
+        .modal-loader {
+            display: flex; flex-direction: column; align-items: center;
+            justify-content: center; padding: 4rem 0; gap: 1.5rem;
+        }
+
+        /* ── Markdown styling within modals ── */
+        .md-content h2, .md-content h3 {
+            font-family: var(--font-display); color: var(--gold);
+            margin-top: 1.5rem; margin-bottom: 0.75rem;
+        }
+        .md-content p { margin-bottom: 1rem; }
+        .md-content ul { padding-left: 1.5rem; margin-bottom: 1rem; }
+        .md-content li { margin-bottom: 0.5rem; }
+        .md-content strong { color: var(--gold-light); }
+        .md-content blockquote {
+            border-left: 3px solid var(--crimson-light);
+            padding-left: 1rem; margin-left: 0;
+            color: var(--text-secondary); font-style: italic;
+            background: rgba(139,32,53,0.05); padding: 1rem; border-radius: 4px;
+        }
+
+        @media (max-width: 900px) {
+            .main-container { grid-template-columns: 1fr; }
+            .search-panel { position: static; }
+            .strategy-toolkit { flex-direction: column; gap: 1rem; align-items: flex-start; }
+            .btn-outline { width: 100%; }
+        }
+
+    </style>
+</head>
+<body>
+    <div class="bg-grid"></div>
+
+    <header class="page-header">
+        <div class="header-inner">
+            <div class="header-left">
+                <a href="/" class="back-btn"><i class="fas fa-arrow-left"></i> Home</a>
+                <span class="page-title">🧠 Case Intelligence</span>
+            </div>
+            <div class="header-right">
+                <div class="db-status">
+                    <span style="color:var(--text-muted)">Archive Size:</span>
+                    <span id="nav-archive-size" style="color:var(--gold)">Loading...</span>
+                </div>
+            </div>
+        </div>
+    </header>
+
+    <main class="main-container">
+
+        <!-- Sidebar: Search Form -->
+        <aside class="search-panel">
+            <div class="panel-heading">
+                <div class="panel-icon"><i class="fas fa-search"></i></div>
+                <h2>Semantic Search</h2>
+            </div>
+            <form id="search-form" onsubmit="event.preventDefault(); executeSearch();">
+                <div class="form-group">
+                    <label class="form-label">Scenario Description</label>
+                    <textarea id="search-query" class="form-textarea" required placeholder="Describe the legal situation, facts of the case, or the legal argument you want to build..."></textarea>
+                    <div class="form-hint">E.g. "Bail in a money laundering case under PMLA where the accused is a woman suffering from severe illness."</div>
+                </div>
+
+                <div class="form-group">
+                    <label class="form-label">Domain Filter (Optional)</label>
+                    <select id="search-domain" class="form-select">
+                        <option value="">— Any Domain —</option>
+                        <option value="criminal">Criminal Law</option>
+                        <option value="civil">Civil Law</option>
+                        <option value="constitutional">Constitutional Law</option>
+                        <option value="taxation">Taxation</option>
+                        <option value="corporate">Corporate Law</option>
+                        <option value="family">Family Law</option>
+                        <option value="property">Property Law</option>
+                    </select>
+                </div>
+
+                <div class="form-group">
+                    <label class="form-label">Statute References (Comma Separated)</label>
+                    <input type="text" id="search-statutes" class="form-input" placeholder="e.g. Article 21, Section 45 PMLA, NDPS Act">
+                    <div class="form-hint">Helps boost relevance for specific legislative provisions.</div>
+                </div>
+
+                <button type="submit" class="btn-primary" id="btn-search">
+                    <i class="fas fa-magic"></i> &nbsp; Search Precedents
+                </button>
+            </form>
+        </aside>
+
+        <!-- Main Content Area: Results -->
+        <section class="content-area">
+
+            <!-- Strategy Toolkit (Visible when results exist) -->
+            <div class="strategy-toolkit hidden" id="strategy-toolkit">
+                <div class="toolkit-info">
+                    <h3 class="toolkit-title">Litigation Strategy Builder</h3>
+                    <p class="toolkit-desc">Synthesize these precedents into a cohesive legal argument and identify weaknesses.</p>
+                </div>
+                <button class="btn-outline" id="btn-build-strategy" onclick="buildStrategy()">
+                    <i class="fas fa-chess-knight"></i> Generate Strategy
+                </button>
+            </div>
+
+            <div id="results-container">
+                <!-- Status View -->
+                <div class="status-pane" id="status-pane">
+                    <div class="status-icon"><i class="fas fa-balance-scale"></i></div>
+                    <div class="status-text">Ready for Intelligence Query</div>
+                    <div class="status-subtext">
+                        Enter your case facts or legal prompt on the left. The engine will map semantic embeddings against the Supreme Court repository to locate the most contextually relevant precedents.
+                    </div>
+                </div>
+                
+                <!-- Actual Results will be rendered here -->
+                <div class="results-list hidden" id="results-list"></div>
+            </div>
+
+        </section>
+
+    </main>
+
+    <!-- Modals -->
+    <div class="modal-overlay" id="modal">
+        <div class="modal-content">
+            <div class="modal-header">
+                <div class="modal-title" id="modal-title">Title</div>
+                <button class="modal-close" onclick="closeModal()"><i class="fas fa-times"></i></button>
+            </div>
+            <div class="modal-body" id="modal-body">
+                <!-- Content injected here -->
+            </div>
+        </div>
+    </div>
+
+    <!-- Argument Analyzer Modal (Specific input form) -->
+    <div class="modal-overlay" id="arg-modal">
+        <div class="modal-content">
+            <div class="modal-header">
+                <div class="modal-title">Analyze Argument: <span id="arg-case-title" style="color:var(--text-primary); font-size:1rem; font-family:var(--font-ui);"></span></div>
+                <button class="modal-close" onclick="closeModal('arg-modal')"><i class="fas fa-times"></i></button>
+            </div>
+            <div class="modal-body">
+                <div class="form-group">
+                    <label class="form-label" style="color:var(--gold)">Your Proposed Argument</label>
+                    <textarea id="arg-input" class="form-textarea" placeholder="State the argument you plan to make relating to this precedent..."></textarea>
+                    <div class="form-hint" style="margin-bottom: 1rem;">The LLM will verify if this precedent supports or contradicts your argument.</div>
+                    <button class="btn-outline" id="btn-analyze-arg" style="width:100%" onclick="submitArgumentAnalysis()">Analyze Alignment</button>
+                </div>
+                <div id="arg-results" style="margin-top: 2rem; border-top: 1px solid var(--border-subtle); padding-top: 1.5rem; display: none;">
+                    <!-- Assessment results -->
+                </div>
+            </div>
+        </div>
+    </div>
+
+
+    <script>
+        const API_BASE = window.location.origin;
+        let currentResults = []; // Store fetched cases
+        let currentArgCaseId = null;
+
+        // On Load
+        document.addEventListener('DOMContentLoaded', async () => {
+            try {
+                const resp = await fetch(`${API_BASE}/api/case-research/stats`);
+                const data = await resp.json();
+                if (data.loaded && data.total_cases) {
+                    document.getElementById('nav-archive-size').textContent = `${data.total_cases.toLocaleString()} Cases`;
+                } else {
+                    document.getElementById('nav-archive-size').textContent = 'Index Offline';
+                }
+            } catch (e) {
+                document.getElementById('nav-archive-size').textContent = 'Cannot Connect';
+            }
+        });
+
+        // Search Execution
+        async function executeSearch() {
+            const query = document.getElementById('search-query').value;
+            const domain = document.getElementById('search-domain').value || null;
+            const statutesRaw = document.getElementById('search-statutes').value;
+            const statutes = statutesRaw ? statutesRaw.split(',').map(s => s.trim()).filter(s => s) : null;
+
+            if (!query) return;
+
+            const btn = document.getElementById('btn-search');
+            btn.disabled = true;
+            btn.innerHTML = '<i class="fas fa-spinner fa-spin"></i> &nbsp; Searching...';
+
+            showStatusPane('<i class="fas fa-satellite-dish spin"></i>', 'Scanning Vector Space...', 'Computing query embeddings and traversing the semantic index against the Supreme Court archive.');
+            document.getElementById('strategy-toolkit').classList.add('hidden');
+
+            try {
+                const resp = await fetch(`${API_BASE}/api/case-research/search`, {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({
+                        case_description: query,
+                        legal_domain: domain,
+                        key_statutes: statutes,
+                        num_results: 5
+                    })
+                });
+
+                if (!resp.ok) throw new Error(`HTTP ${resp.status}`);
+                
+                const data = await resp.json();
+                
+                // If the backend has no data yet or returned empty list
+                if (data.status === "NO_RESULTS" || !data.results || data.results.length === 0) {
+                    if (data.message) throw new Error(data.message);
+                    throw new Error("No matching precedents found in the local index.");
+                }
+
+                currentResults = data.results;
+                renderResults(data.results);
+                document.getElementById('strategy-toolkit').classList.remove('hidden');
+
+            } catch (err) {
+                showStatusPane('<i class="fas fa-exclamation-triangle" style="color:var(--crimson-light)"></i>', 'Search Error', err.message);
+            } finally {
+                btn.disabled = false;
+                btn.innerHTML = '<i class="fas fa-magic"></i> &nbsp; Search Precedents';
+            }
+        }
+
+        function showStatusPane(iconHTML, title, subtext) {
+            document.getElementById('results-list').classList.add('hidden');
+            const pane = document.getElementById('status-pane');
+            pane.classList.remove('hidden');
+            pane.innerHTML = `
+                <div class="status-icon">${iconHTML}</div>
+                <div class="status-text">${title}</div>
+                <div class="status-subtext">${subtext}</div>
+            `;
+        }
+
+        function renderResults(cases) {
+            document.getElementById('status-pane').classList.add('hidden');
+            const list = document.getElementById('results-list');
+            list.classList.remove('hidden');
+
+            list.innerHTML = cases.map((c, i) => {
+                const similarity = (c.similarity_score * 100).toFixed(1);
+                const stats = c.key_statutes && c.key_statutes.length ? c.key_statutes.map(s => `<span class="statute-badge">${esc(s)}</span>`).join('') : '';
+                
+                return `
+                <div class="case-card" style="animation: resultSlideIn 0.5s ease forwards; animation-delay: ${i * 0.1}s">
+                    <div class="case-card-header">
+                        <div class="case-meta">
+                            ${c.legal_domain ? `<span class="case-domain">${esc(c.legal_domain)}</span>` : ''}
+                        </div>
+                        <div class="case-similarity"><i class="fas fa-bullseye"></i> ${similarity}% Match</div>
+                    </div>
+                    
+                    <h3 class="case-title">${esc(c.case_title)}</h3>
+                    <div class="case-bench"><i class="fas fa-gavel"></i> ${esc(c.court || 'Supreme Court Bench')}</div>
+                    
+                    <div class="case-summary">${esc(c.searchable_summary || 'No summary available for this judgment.')}</div>
+                    
+                    ${stats ? `<div class="case-statutes">${stats}</div>` : ''}
+
+                    <div class="case-actions">
+                        <a class="action-link" onclick="readJudgment('${escSingle(c.source_file)}')"><i class="fas fa-book-reader"></i> Read Full Text</a>
+                        <a class="action-link" onclick="openArgumentAnalyzer('${escSingle(c.source_file)}', '${escSingle(c.case_title)}')"><i class="fas fa-microscope"></i> Analyze Argument</a>
+                    </div>
+                </div>
+                `;
+            }).join('');
+        }
+
+        // ==========================================
+        // API ACTIONS (Modals & Calls)
+        // ==========================================
+        
+        // 1. Read Full Judgment Text
+        async function readJudgment(caseId) {
+            openModal('Loading Judgment...', `
+                <div class="modal-loader">
+                    <i class="fas fa-circle-notch fa-spin status-icon"></i>
+                    <div class="status-text">Fetching Text from Archive</div>
+                </div>
+            `);
+
+            try {
+                const resp = await fetch(`${API_BASE}/api/case-research/read-case`, {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ source_file: caseId })
+                });
+                
+                if (!resp.ok) throw new Error("Failed to load judgement.");
+                const data = await resp.json();
+                
+                document.getElementById('modal-title').textContent = data.source_file || 'Judgment';
+                document.getElementById('modal-body').innerHTML = `<div class="md-content"><pre style="font-family:var(--font-body); white-space:pre-wrap; line-height:1.6; padding:1rem; background:var(--bg-card); border-radius:8px; border:1px solid var(--border-subtle);">${esc(data.full_text)}</pre></div>`;
+            } catch (err) {
+                document.getElementById('modal-body').innerHTML = `<p style="color:var(--crimson-light); text-align:center;">${err.message}</p>`;
+            }
+        }
+
+        // 2. Argument Analyzer
+        function openArgumentAnalyzer(caseId, caseTitle) {
+            currentArgCaseId = caseId;
+            document.getElementById('arg-case-title').textContent = caseTitle;
+            document.getElementById('arg-input').value = '';
+            document.getElementById('arg-results').style.display = 'none';
+            document.getElementById('arg-modal').classList.add('active');
+        }
+
+        async function submitArgumentAnalysis() {
+            const arg = document.getElementById('arg-input').value;
+            if (!arg || !currentArgCaseId) return;
+
+            const btn = document.getElementById('btn-analyze-arg');
+            const resContainer = document.getElementById('arg-results');
+            
+            btn.disabled = true;
+            btn.innerHTML = '<i class="fas fa-spinner fa-spin"></i> Analyzing with LLM...';
+            resContainer.style.display = 'block';
+            resContainer.innerHTML = `
+                <div class="modal-loader" style="padding: 2rem 0">
+                    <i class="fas fa-brain status-icon spin" style="font-size: 2rem; color: var(--gold);"></i>
+                    <div class="status-subtext">Evaluating alignment and extracting quotes using RAG...</div>
+                </div>
+            `;
+
+            try {
+                const foundCase = currentResults.find(c => c.source_file === currentArgCaseId) || {};
+                
+                const resp = await fetch(`${API_BASE}/api/case-research/analyze-for-argument`, {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({
+                        case_description: arg,
+                        found_case: foundCase
+                    })
+                });
+
+                if (!resp.ok) throw new Error("Analysis failed");
+                const data = await resp.json();
+
+                resContainer.innerHTML = `
+                    <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:1.5rem;">
+                        <h3 style="font-family:var(--font-display); color:var(--text-primary);">LLM Assessment</h3>
+                    </div>
+                    
+                    <div class="md-content">
+                        ${parseMarkdown(data.analysis)}
+                    </div>
+                `;
+
+            } catch (err) {
+                resContainer.innerHTML = `<p style="color:var(--crimson-light); text-align:center;">${err.message}</p>`;
+            } finally {
+                btn.disabled = false;
+                btn.innerHTML = 'Analyze Alignment';
+            }
+        }
+
+        // 3. Build Strategy from ALL RESULTS
+        async function buildStrategy() {
+            const query = document.getElementById('search-query').value;
+            const caseIds = currentResults.map(c => c.source_file);
+            if (caseIds.length === 0) return;
+
+            openModal('Litigation Strategy Document', `
+                <div class="modal-loader">
+                    <i class="fas fa-chess-knight status-icon spin" style="font-size:3rem"></i>
+                    <div class="status-text">Synthesizing Master Strategy</div>
+                    <div class="status-subtext">The LLM is aggressively processing all ${caseIds.length} precedents simultaneously to architect a comprehensive legal framework. This may take 15-30 seconds.</div>
+                </div>
+            `);
+
+            try {
+                const resp = await fetch(`${API_BASE}/api/case-research/build-strategy`, {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({
+                        case_description: query,
+                        similar_cases: currentResults
+                    })
+                });
+
+                if (!resp.ok) throw new Error("Strategy generation failed.");
+                const data = await resp.json();
+
+                document.getElementById('modal-body').innerHTML = `
+                    <div class="md-content">
+                        <!-- We parse Markdown into HTML for better rendering -->
+                        ${parseMarkdown(data.strategy || "Strategy couldn't be generated.")}
+                    </div>
+                `;
+
+            } catch (err) {
+                document.getElementById('modal-body').innerHTML = `<p style="color:var(--crimson-light); text-align:center;">${err.message}</p>`;
+            }
+        }
+
+        // ==========================================
+        // UTILS
+        // ==========================================
+        function openModal(title, content) {
+            document.getElementById('modal-title').textContent = title;
+            document.getElementById('modal-body').innerHTML = content;
+            document.getElementById('modal').classList.add('active');
+        }
+
+        function closeModal(id = 'modal') {
+            document.getElementById(id).classList.remove('active');
+        }
+
+        function esc(s) {
+            if (s === null || s === undefined) return '';
+            const div = document.createElement('div');
+            div.textContent = String(s);
+            return div.innerHTML;
+        }
+
+        function escSingle(s) {
+            return String(s || '').replace(/'/g, "\\'");
+        }
+
+        // Simple Markdown parser for Bold, Italics, Lists, Headers
+        function parseMarkdown(md) {
+            if (!md) return '';
+            let html = md;
+            html = html.replace(/^### (.*$)/gim, '<h3>$1</h3>');
+            html = html.replace(/^## (.*$)/gim, '<h2>$1</h2>');
+            html = html.replace(/\*\*(.*?)\*\*/gim, '<strong>$1</strong>');
+            html = html.replace(/\*(.*?)\*/gim, '<em>$1</em>');
+            html = html.replace(/^\- (.*$)/gim, '<ul><li>$1</li></ul>');
+            
+            // Clean up multiple ul blocks together
+            html = html.replace(/<\/ul>\n<ul>/gim, '\n');
+            
+            // Convert newlines to breaks for paragraphs (if they are not already in tags)
+            html = html.split('\n').map(line => {
+                if(line.trim() === '') return '<br>';
+                if(line.startsWith('<')) return line;
+                return `<p>${line}</p>`;
+            }).join('');
+
+            return html;
+        }
+
+    </script>
+</body>
+</html>
