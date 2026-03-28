@@ -634,6 +634,35 @@
             letter-spacing: 1.5px;
         }
 
+        /* ── Language Selector ── */
+        .language-selector select {
+            background: rgba(76, 175, 138, 0.05);
+            border: 1px solid var(--border-subtle);
+            color: var(--emerald-light);
+            font-family: var(--font-mono);
+            font-size: 0.7rem;
+            padding: 0.35rem 0.8rem;
+            border-radius: 4px;
+            outline: none;
+            cursor: pointer;
+            text-transform: uppercase;
+            letter-spacing: 1px;
+            transition: all 0.3s ease;
+            -webkit-appearance: none;
+            -moz-appearance: none;
+            appearance: none;
+        }
+
+        .language-selector select:hover {
+            border-color: var(--border-gold);
+            background: rgba(76, 175, 138, 0.1);
+        }
+
+        .language-selector select option {
+            background: var(--bg-panel);
+            color: var(--text-primary);
+        }
+
         @media (max-width: 800px) {
             .bail-main { grid-template-columns: 1fr; }
             .bail-header-badge { display: none; }
@@ -660,6 +689,13 @@
                 <span class="bail-header-title">⚖️ Bail Reckoner</span>
             </div>
             <div class="bail-header-right">
+                <div class="language-selector">
+                    <select id="bail-language">
+                        <option value="english">English (IN)</option>
+                        <option value="hindi">Hindi (हिंदी)</option>
+                        <option value="hinglish">Hinglish</option>
+                    </select>
+                </div>
                 <div class="db-status">
                     <div class="db-status-dot" id="db-dot"></div>
                     <span class="db-status-text" id="db-text">Checking DB...</span>
@@ -811,6 +847,14 @@
         // ON LOAD — Check if bail database is loaded
         // ============================================================
         document.addEventListener('DOMContentLoaded', async () => {
+            // Language sync
+            const langSelect = document.getElementById('bail-language');
+            const savedLang = localStorage.getItem('lexai_language') || 'english';
+            langSelect.value = savedLang;
+            langSelect.addEventListener('change', (e) => {
+                localStorage.setItem('lexai_language', e.target.value);
+            });
+
             const dot = document.getElementById('db-dot');
             const text = document.getElementById('db-text');
             try {

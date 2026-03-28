@@ -163,6 +163,7 @@ app.mount("/static", StaticFiles(directory="frontend/static"), name="static")
 # ==========================================
 class VoiceAnalyzeRequest(BaseModel):
     transcript: str
+    language: Optional[str] = "english"
 
 class ChatMessage(BaseModel):
     message: str
@@ -195,6 +196,11 @@ async def serve_auditor():
 async def serve_bail_reckoner():
     return FileResponse("frontend/templates/bail-reckoner.html")
 
+# Voice Assistant route
+@app.get("/voice-assistant", response_class=FileResponse)
+async def serve_voice_assistant():
+    return FileResponse("frontend/templates/voice-assistant.html")
+
 # API stats endpoint (keep your existing one, just rename the root)
 @app.get("/api/health")
 def api_health():
@@ -207,7 +213,7 @@ def api_health():
 # ==========================================
 # 4. Core Helper Functions
 # ==========================================
-def chunk_text(text, chunk_size=10000, overlap=2000):
+def chunk_text(text, chunk_size=30000, overlap=3000):
     """Splits text into overlapping chunks so citations aren't cut in half."""
     chunks = []
     start = 0
@@ -781,6 +787,128 @@ def resolve_match_with_llm(target_citation, candidates_df, language: str = "engl
         return {"status": "ERROR", "message": f"Groq API Error: {str(e)}", "confidence": 0}
 
 
+def batch_resolve_matches_with_llm(citation_candidate_pairs: list, language: str = "english"):
+    """
+    Batch-resolve multiple citations in a SINGLE LLM call to reduce API overhead.
+    
+    Args:
+        citation_candidate_pairs: list of (citation_name, candidates_df) tuples
+        language: language for response
+    
+    Returns:
+        dict mapping citation_name -> verification result
+    """
+    # Separate citations with candidates vs without
+    results = {}
+    batch_items = []
+    
+    for citation, candidates_df in citation_candidate_pairs:
+        if candidates_df.empty:
+            results[citation] = {"status": "🔴 NO CANDIDATES", "message": "No similar cases found in database.", "confidence": 0}
+        else:
+            candidate_dict = {
+                str(row['index']): f"{row.get('title', 'Unknown')} (NC: {row.get('nc_display', 'N/A')}, Citation: {row.get('citation', 'N/A')})"
+                for _, row in candidates_df.iterrows()
+            }
+            batch_items.append((citation, candidate_dict))
+    
+    if not batch_items:
+        return results
+    
+    # Process in batches of up to 5 citations per LLM call
+    BATCH_SIZE = 5
+    lang_suffix = get_language_prompt_suffix(language)
+    
+    for batch_start in range(0, len(batch_items), BATCH_SIZE):
+        batch = batch_items[batch_start:batch_start + BATCH_SIZE]
+        
+        # Build a combined prompt for all citations in this batch
+        citations_section = ""
+        for idx, (citation, candidate_dict) in enumerate(batch, 1):
+            citations_section += f"""
+CITATION #{idx}: "{citation}"
+Candidates: {json.dumps(candidate_dict)}
+
+"""
+        
+        prompt = f"""You are a STRICT legal AI auditor. Verify if EACH of the following Target Citations exists in their respective Database Candidates.
+
+{citations_section}
+
+RULES (apply to ALL citations):
+1. Minor formatting differences ("v." vs "versus") or missing articles ("The") are ALLOWED.
+2. If the neutral citation (NC) matches (e.g. 2024 INSC 2), it is an EXACT match.
+3. If party names match on both sides (petitioner vs respondent), it is an EXACT match.
+If there is an EXACT match, return its ID. If NO EXACT MATCH, return "null".
+
+{lang_suffix}
+
+Respond ONLY with JSON containing a "results" array with one entry per citation in ORDER:
+{{"results": [{{"citation_number": 1, "matched_id": "id_or_null", "reason": "Short reason", "confidence": 85}}, ...]}}
+"""
+        
+        try:
+            response = client.chat.completions.create(
+                model="llama-3.3-70b-versatile",
+                messages=[
+                    {"role": "system", "content": "You output only valid JSON. You are a strict auditor."},
+                    {"role": "user", "content": prompt}
+                ],
+                response_format={"type": "json_object"},
+                temperature=0.0
+            )
+            result_json = json.loads(response.choices[0].message.content)
+            batch_results = result_json.get("results", [])
+            
+            for idx, (citation, candidate_dict) in enumerate(batch):
+                if idx < len(batch_results):
+                    item = batch_results[idx]
+                else:
+                    results[citation] = {"status": "ERROR", "message": "No result from batch LLM call", "confidence": 0}
+                    continue
+                
+                matched_id = item.get("matched_id")
+                reason = item.get("reason", "No reason provided.")
+                confidence = item.get("confidence", 50)
+                
+                if matched_id and str(matched_id) != "null":
+                    try:
+                        winning_row = df[df['index'] == int(matched_id)].iloc[0]
+                        file_path_val = winning_row.get('path', '')
+                        results[citation] = {
+                            "status": "🟢 VERIFIED BY AI",
+                            "matched_name": winning_row.get('title', 'Unknown'),
+                            "matched_citation": winning_row.get('nc_display', winning_row.get('citation', 'N/A')),
+                            "file_to_open": str(file_path_val) if pd.notna(file_path_val) else "",
+                            "reason": reason,
+                            "confidence": confidence
+                        }
+                    except (ValueError, IndexError) as e:
+                        logger.error(f"Could not find matched_id {matched_id} for '{citation}': {e}")
+                        results[citation] = {
+                            "status": "🔴 HALLUCINATION DETECTED",
+                            "message": f"LLM returned invalid ID: {matched_id}",
+                            "confidence": 0
+                        }
+                else:
+                    results[citation] = {
+                        "status": "🔴 HALLUCINATION DETECTED",
+                        "message": f"Reason: {reason}",
+                        "confidence": confidence
+                    }
+                    
+        except Exception as e:
+            logger.error(f"Batch LLM resolution failed: {e}")
+            # Fall back to individual resolution for this batch
+            for citation, candidate_dict in batch:
+                if citation not in results:
+                    # Re-get candidates and use single resolution
+                    candidates = get_broad_candidates(citation)
+                    results[citation] = resolve_match_with_llm(citation, candidates, language)
+    
+    return results
+
+
 # ==========================================
 # 5. API Endpoints
 # ==========================================
@@ -826,9 +954,19 @@ async def audit_document(file: UploadFile = File(...), language: str = Form("eng
 
     final_report = []
 
+    # ── Batch-resolve all SC citations in fewer LLM calls ──
+    sc_candidate_pairs = []
     for citation in sc_citations:
         candidates = get_broad_candidates(citation)
-        verification_result = resolve_match_with_llm(citation, candidates, language)
+        sc_candidate_pairs.append((citation, candidates))
+    
+    # This sends up to 5 citations per LLM call instead of 1
+    sc_verification_results = batch_resolve_matches_with_llm(sc_candidate_pairs, language)
+
+    for citation in sc_citations:
+        verification_result = sc_verification_results.get(citation, {
+            "status": "ERROR", "message": "Verification not returned from batch", "confidence": 0
+        })
         
         quote_verification = {}
         claim = case_details.get(citation, {}).get("attributed_claim", "")
@@ -849,10 +987,18 @@ async def audit_document(file: UploadFile = File(...), language: str = Form("eng
             "quote_verification": quote_verification
         })
 
+    # ── Batch-resolve HC citations too ──
+    hc_candidate_pairs = []
     for citation in hc_citations:
         candidates = get_broad_candidates(citation)
-        if not candidates.empty:
-            verification_result = resolve_match_with_llm(citation, candidates, language)
+        hc_candidate_pairs.append((citation, candidates))
+    
+    hc_verification_results = batch_resolve_matches_with_llm(hc_candidate_pairs, language) if hc_candidate_pairs else {}
+
+    for citation in hc_citations:
+        verification_result = hc_verification_results.get(citation, None)
+        
+        if verification_result and verification_result.get("status") != "🔴 NO CANDIDATES":
             verification_result["status"] = "⚠️ HC-" + verification_result["status"].replace("🟢 ", "").replace("🔴 ", "")
         else:
             verification_result = {
@@ -908,9 +1054,15 @@ async def audit_multiple(files: List[UploadFile] = File(...), language: str = Fo
         total_hc += len(hc_citations)
 
         file_report = []
+        
+        # Batch-resolve SC citations for this file
+        sc_candidate_pairs = [(c, get_broad_candidates(c)) for c in sc_citations]
+        sc_batch_results = batch_resolve_matches_with_llm(sc_candidate_pairs, language)
+        
         for citation in sc_citations:
-            candidates = get_broad_candidates(citation)
-            verification_result = resolve_match_with_llm(citation, candidates, language)
+            verification_result = sc_batch_results.get(citation, {
+                "status": "ERROR", "message": "Batch verification missing", "confidence": 0
+            })
             
             quote_verification = {}
             claim = case_details.get(citation, {}).get("attributed_claim", "")
@@ -1089,6 +1241,7 @@ async def voice_analyze(req: VoiceAnalyzeRequest):
     if not req.transcript or not req.transcript.strip():
         raise HTTPException(status_code=400, detail="Transcript cannot be empty.")
 
+    lang_suffix = get_language_prompt_suffix(req.language)
     prompt = f"""You are LexAI, an expert AI legal assistant specializing in Indian law (Supreme Court, High Court, IPC, CrPC, Constitution).
 
 A user has spoken the following legal query:
@@ -1114,7 +1267,9 @@ Rules:
 - citations: provide 2-4 real, relevant Indian Supreme Court or High Court cases. If none are clearly relevant, return an empty array.
 - legal_suggestions: provide 3-5 clear, numbered action steps the person should take.
 - Keep advice professional, clear, and grounded in Indian law.
-- Respond ONLY with the JSON. No extra text."""
+- Respond ONLY with the JSON. No extra text.
+
+{lang_suffix}"""
 
     try:
         response = client.chat.completions.create(

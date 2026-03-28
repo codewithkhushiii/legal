@@ -458,6 +458,35 @@
             background: rgba(139,32,53,0.05); padding: 1rem; border-radius: 4px;
         }
 
+        /* ── Language Selector ── */
+        .language-selector select {
+            background: rgba(196, 68, 90, 0.05);
+            border: 1px solid var(--border-subtle);
+            color: var(--crimson-light);
+            font-family: var(--font-mono);
+            font-size: 0.7rem;
+            padding: 0.35rem 0.8rem;
+            border-radius: 4px;
+            outline: none;
+            cursor: pointer;
+            text-transform: uppercase;
+            letter-spacing: 1px;
+            transition: all 0.3s ease;
+            -webkit-appearance: none;
+            -moz-appearance: none;
+            appearance: none;
+        }
+
+        .language-selector select:hover {
+            border-color: var(--crimson-glow);
+            background: rgba(196, 68, 90, 0.1);
+        }
+
+        .language-selector select option {
+            background: var(--bg-panel);
+            color: var(--text-primary);
+        }
+
         @media (max-width: 900px) {
             .main-container { grid-template-columns: 1fr; }
             .search-panel { position: static; }
@@ -477,6 +506,13 @@
                 <span class="page-title">🧠 Case Intelligence</span>
             </div>
             <div class="header-right">
+                <div class="language-selector">
+                    <select id="case-language">
+                        <option value="english">English (IN)</option>
+                        <option value="hindi">Hindi (हिंदी)</option>
+                        <option value="hinglish">Hinglish</option>
+                    </select>
+                </div>
                 <div class="db-status">
                     <span style="color:var(--text-muted)">Archive Size:</span>
                     <span id="nav-archive-size" style="color:var(--gold)">Loading...</span>
@@ -600,6 +636,14 @@
 
         // On Load
         document.addEventListener('DOMContentLoaded', async () => {
+            // Language sync
+            const langSelect = document.getElementById('case-language');
+            const savedLang = localStorage.getItem('lexai_language') || 'english';
+            langSelect.value = savedLang;
+            langSelect.addEventListener('change', (e) => {
+                localStorage.setItem('lexai_language', e.target.value);
+            });
+
             try {
                 const resp = await fetch(`${API_BASE}/api/case-research/stats`);
                 const data = await resp.json();

@@ -635,10 +635,11 @@
 
             try {
                 const API_BASE = window.location.origin;
+                const selectedLanguage = document.getElementById('voicelang').value || 'english';
                 const response = await fetch(`${API_BASE}/voice-analyze`, {
                     method: 'POST',
                     headers: { 'Content-Type': 'application/json' },
-                    body: JSON.stringify({ transcript: text })
+                    body: JSON.stringify({ transcript: text, language: selectedLanguage })
                 });
 
                 if (!response.ok) throw new Error('API Error: ' + response.status);
