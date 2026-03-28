@@ -422,6 +422,7 @@
             50% { opacity: 0.4; }
         }
 
+        
         .header-clock {
             font-family: var(--font-mono);
             font-size: 0.7rem;
@@ -431,6 +432,59 @@
             border: 1px solid var(--border-subtle);
             border-radius: 4px;
         }
+
+        .language-selector select {
+            background: rgba(201, 168, 76, 0.05);
+            border: 1px solid var(--border-subtle);
+            color: var(--gold);
+            font-family: var(--font-mono);
+            font-size: 0.7rem;
+            padding: 0.35rem 0.8rem;
+            border-radius: 4px;
+            outline: none;
+            cursor: pointer;
+            text-transform: uppercase;
+            letter-spacing: 1px;
+            transition: all 0.3s ease;
+            -webkit-appearance: none;
+            -moz-appearance: none;
+            appearance: none;
+        }
+
+        .language-selector select:hover {
+            border-color: var(--border-gold);
+            background: rgba(201, 168, 76, 0.1);
+        }
+
+        .language-selector select option {
+            background: var(--bg-panel);
+            color: var(--text-primary);
+        }
+
+        /* Voice Assistant Card specifically */
+        .tool-card.voice-card:hover { border-color: rgba(184, 134, 11, 0.4); }
+        .tool-card.voice-card .card-icon-ring { border-color: rgba(184, 134, 11, 0.2); }
+        .tool-card.voice-card:hover .card-icon-ring {
+            border-color: var(--amber-light);
+            box-shadow: 0 0 30px rgba(184, 134, 11, 0.2);
+        }
+        .tool-card.voice-card:hover .card-title { color: var(--amber-light); }
+        .tool-card.voice-card .card-stat-number { color: var(--amber-light); }
+        .tool-card.voice-card .card-feature i { color: var(--amber-light); }
+        .tool-card.voice-card .cta-text { color: var(--amber-light); }
+        .tool-card.voice-card .cta-arrow { background: var(--amber-light); }
+        .tool-card.voice-card:hover .card-cta {
+            background: rgba(184, 134, 11, 0.08);
+            border-color: var(--amber-light);
+            box-shadow: 0 0 30px rgba(184, 134, 11, 0.2);
+        }
+        .tool-card.voice-card::before {
+            background: linear-gradient(135deg, rgba(184, 134, 11, 0.2) 0%, transparent 50%);
+        }
+        .tool-card.voice-card .card-glow-border {
+            background: linear-gradient(135deg, var(--amber-light), transparent 40%, transparent 60%, var(--amber));
+        }
+
 
         /* ============================================
            HERO SECTION
@@ -675,7 +729,7 @@
 
         .cards-grid {
             display: grid;
-            grid-template-columns: repeat(3, 1fr);
+            grid-template-columns: repeat(2, 1fr);
             gap: 2.5rem;
         }
 
@@ -874,7 +928,7 @@
 
         .card-stats {
             display: grid;
-            grid-template-columns: repeat(3, 1fr);
+            grid-template-columns: repeat(2, 1fr);
             gap: 1rem;
             padding: 1.2rem 0;
             border-top: 1px solid var(--border-subtle);
@@ -1356,6 +1410,13 @@
                     </div>
                 </div>
                 <div class="header-nav">
+                    <div class="language-selector">
+                        <select id="global-language" onchange="localStorage.setItem('lexai_language', this.value); window.dispatchEvent(new Event('languageChanged'));">
+                            <option value="english">English (IN)</option>
+                            <option value="hindi">Hindi (हिंदी)</option>
+                            <option value="hinglish">Hinglish</option>
+                        </select>
+                    </div>
                     <div class="nav-indicators">
                         <div class="nav-indicator">
                             <div class="indicator-dot"></div>
@@ -1580,8 +1641,10 @@
                             </div>
                         </div>
                     </div>
-            <!-- CASE RESEARCH CARD -->
-            <a href="/case-research" class="tool-card research-card reveal reveal-delay-3" id="card-research">
+                </a>
+
+                <!-- CASE RESEARCH CARD -->
+                <a href="/case-research" class="tool-card research-card reveal reveal-delay-3" id="card-research">
                     <div class="card-glow-border"></div>
                     <div class="card-bg-pattern">
                         <svg viewBox="0 0 200 200" fill="none" xmlns="http://www.w3.org/2000/svg">
@@ -1650,6 +1713,76 @@
                         </div>
                     </div>
                 </a>
+
+                <!-- VOICE ASSISTANT CARD -->
+                <a href="/voice-assistant" class="tool-card voice-card reveal reveal-delay-4" id="card-voice">
+                    <div class="card-glow-border"></div>
+                    <div class="card-bg-pattern">
+                        <svg viewBox="0 0 200 200" fill="none" xmlns="http://www.w3.org/2000/svg">
+                            <circle cx="100" cy="80" r="20" stroke="currentColor" stroke-width="0.5"/>
+                            <path d="M70 80 A30 30 0 0 0 130 80 M100 110 L100 140 M80 140 L120 140" stroke="currentColor" stroke-width="0.5"/>
+                        </svg>
+                    </div>
+                    <div class="card-header">
+                        <div class="card-icon-area">
+                            <div class="card-icon-ring"></div>
+                            <div class="card-icon-symbol">🎙️</div>
+                        </div>
+                        <div class="card-number">Module IV — Voice Intelligence</div>
+                        <h3 class="card-title">LexAI Voice</h3>
+                        <p class="card-subtitle">
+                            Speak your legal queries naturally. Our Voice Assistant transcribes, 
+                            analyzes, and instantly prescribes legal strategy, structured advice, 
+                            and case law citations.
+                        </p>
+                    </div>
+                    <div class="card-body">
+                        <div class="card-features">
+                            <div class="card-feature">
+                                <i class="fas fa-check"></i>
+                                <span>Real-time speech-to-text dictation</span>
+                            </div>
+                            <div class="card-feature">
+                                <i class="fas fa-check"></i>
+                                <span>Contextual multi-lingual processing</span>
+                            </div>
+                            <div class="card-feature">
+                                <i class="fas fa-check"></i>
+                                <span>Fast extraction of relevant citations</span>
+                            </div>
+                            <div class="card-feature">
+                                <i class="fas fa-check"></i>
+                                <span>Actionable legal steps generated instantly</span>
+                            </div>
+                            <div class="card-feature">
+                                <i class="fas fa-check"></i>
+                                <span>Optimized for Indian judicial parlance</span>
+                            </div>
+                        </div>
+                        <div class="card-stats">
+                            <div class="card-stat">
+                                <div class="card-stat-number">0.8s</div>
+                                <div class="card-stat-label">Response Time</div>
+                            </div>
+                            <div class="card-stat">
+                                <div class="card-stat-number">AI</div>
+                                <div class="card-stat-label">Speech Engine</div>
+                            </div>
+                            <div class="card-stat">
+                                <div class="card-stat-number">Json</div>
+                                <div class="card-stat-label">Structured Output</div>
+                            </div>
+                        </div>
+                    </div>
+                    <div class="card-footer">
+                        <div class="card-cta">
+                            <span class="cta-text">Enter Voice Assistant</span>
+                            <div class="cta-arrow">
+                                <i class="fas fa-arrow-right"></i>
+                            </div>
+                        </div>
+                    </div>
+                </a>
             </div>
         </section>
 
@@ -1702,9 +1835,16 @@
         // ============================
         // CONFIG
         // ============================
+        // ============================
+        // CONFIG
+        // ============================
         const API_BASE = window.location.hostname === 'localhost' 
             ? 'http://localhost:8000' 
             : '';
+
+        // Initialize language
+        const savedLang = localStorage.getItem('lexai_language') || 'english';
+        document.getElementById('global-language').value = savedLang;
 
         // ============================
         // BOOT SEQUENCE

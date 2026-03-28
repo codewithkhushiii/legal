@@ -1,0 +1,681 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>🎙️ LexAI Voice Assistant — Supreme Court of India</title>
+    <meta name="description" content="AI-powered voice legal assistant for Indian law. Speak your query and receive structured legal advice, citations, and action steps.">
+    <link href="https://fonts.googleapis.com/css2?family=Playfair+Display:ital,wght@0,400;0,500;0,600;0,700;0,800;0,900;1,400;1,500&family=Cormorant+Garamond:ital,wght@0,300;0,400;0,500;0,600;0,700;1,300;1,400;1,500&family=JetBrains+Mono:wght@300;400;500;600;700&family=Inter:wght@300;400;500;600;700;800&display=swap" rel="stylesheet">
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.0/css/all.min.css">
+    <style>
+        :root {
+            --bg-deepest: #0a0a0f;
+            --bg-dark: #0d0d14;
+            --bg-panel: #111118;
+            --bg-card: #16161f;
+            --bg-elevated: #1a1a25;
+            --gold: #c9a84c;
+            --gold-light: #e8d48b;
+            --gold-dark: #8b6914;
+            --amber: #b8860b;
+            --amber-light: #e8b877;
+            --text-primary: #e8e4dc;
+            --text-secondary: #9a9488;
+            --text-muted: #5a5650;
+            --border-subtle: rgba(201, 168, 76, 0.08);
+            --border-gold: rgba(201, 168, 76, 0.2);
+            --font-display: 'Playfair Display', serif;
+            --font-body: 'Cormorant Garamond', serif;
+            --font-ui: 'Inter', sans-serif;
+            --font-mono: 'JetBrains Mono', monospace;
+        }
+
+        *, *::before, *::after { margin: 0; padding: 0; box-sizing: border-box; }
+
+        body {
+            background: var(--bg-deepest);
+            color: var(--text-primary);
+            font-family: var(--font-ui);
+            min-height: 100vh;
+            display: flex;
+            flex-direction: column;
+        }
+
+        a { text-decoration: none; color: inherit; }
+
+        /* ── HEADER ── */
+        .header {
+            background: rgba(10, 10, 15, 0.92);
+            backdrop-filter: blur(20px);
+            border-bottom: 1px solid var(--border-subtle);
+            padding: 0 2.5rem;
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            height: 72px;
+            position: sticky;
+            top: 0;
+            z-index: 100;
+        }
+
+        .header-brand { display: flex; align-items: center; gap: 1rem; }
+
+        .brand-emblem {
+            width: 44px; height: 44px;
+            border: 1.5px solid var(--amber);
+            border-radius: 50%;
+            display: flex; align-items: center; justify-content: center;
+            font-size: 1.3rem;
+            position: relative;
+        }
+
+        .brand-emblem::before {
+            content: '';
+            position: absolute;
+            inset: -5px;
+            border: 1px solid rgba(184, 134, 11, 0.15);
+            border-radius: 50%;
+            animation: spinSlow 20s linear infinite;
+        }
+
+        @keyframes spinSlow { to { transform: rotate(360deg); } }
+
+        .brand-text h1 {
+            font-family: var(--font-display);
+            font-size: 1.05rem;
+            font-weight: 700;
+            color: var(--amber-light);
+            letter-spacing: 3px;
+            text-transform: uppercase;
+            line-height: 1.2;
+        }
+
+        .brand-text p {
+            font-family: var(--font-ui);
+            font-size: 0.6rem;
+            color: var(--text-muted);
+            letter-spacing: 2px;
+            text-transform: uppercase;
+        }
+
+        .header-nav { display: flex; align-items: center; gap: 2rem; }
+
+        .language-selector select {
+            background: rgba(184, 134, 11, 0.05);
+            border: 1px solid var(--border-subtle);
+            color: var(--amber);
+            font-family: var(--font-mono);
+            font-size: 0.7rem;
+            padding: 0.4rem 0.9rem;
+            border-radius: 4px;
+            outline: none;
+            cursor: pointer;
+            text-transform: uppercase;
+            letter-spacing: 1px;
+            transition: all 0.3s ease;
+        }
+
+        .language-selector select:hover {
+            border-color: var(--border-gold);
+            background: rgba(184, 134, 11, 0.1);
+        }
+
+        .language-selector select option {
+            background: var(--bg-panel);
+            color: var(--text-primary);
+        }
+
+        .nav-link {
+            font-family: var(--font-mono);
+            font-size: 0.72rem;
+            color: var(--text-muted);
+            text-transform: uppercase;
+            letter-spacing: 1px;
+            display: flex;
+            align-items: center;
+            gap: 0.4rem;
+            transition: color 0.3s ease;
+        }
+
+        .nav-link:hover { color: var(--amber-light); }
+
+        /* ── MAIN ── */
+        .main-container {
+            flex: 1;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            padding: 3rem 1rem 4rem;
+            max-width: 920px;
+            margin: 0 auto;
+            width: 100%;
+        }
+
+        .page-title {
+            font-family: var(--font-display);
+            font-size: 2.4rem;
+            color: var(--text-primary);
+            text-align: center;
+            margin-bottom: 0.5rem;
+        }
+
+        .page-subtitle {
+            font-family: var(--font-body);
+            font-size: 1.2rem;
+            color: var(--text-secondary);
+            text-align: center;
+            margin-bottom: 3rem;
+            line-height: 1.5;
+        }
+
+        /* ── MIC BUTTON ── */
+        .mic-container {
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            margin-bottom: 2.5rem;
+            position: relative;
+        }
+
+        .mic-btn {
+            width: 130px; height: 130px;
+            border-radius: 50%;
+            background: var(--bg-card);
+            border: 2px solid var(--amber);
+            display: flex; align-items: center; justify-content: center;
+            font-size: 3rem;
+            color: var(--amber);
+            cursor: pointer;
+            transition: all 0.3s ease;
+            box-shadow: 0 0 40px rgba(184, 134, 11, 0.08);
+            position: relative;
+            z-index: 10;
+        }
+
+        .mic-btn:hover {
+            transform: scale(1.06);
+            box-shadow: 0 0 50px rgba(184, 134, 11, 0.25);
+            background: rgba(184, 134, 11, 0.08);
+        }
+
+        .mic-btn.listening {
+            animation: pulseMic 1.6s infinite;
+            background: rgba(184, 134, 11, 0.15);
+            border-color: var(--amber-light);
+            color: var(--amber-light);
+        }
+
+        @keyframes pulseMic {
+            0%   { box-shadow: 0 0 0 0 rgba(184,134,11,0.4); transform: scale(1); }
+            50%  { box-shadow: 0 0 0 35px rgba(184,134,11,0); transform: scale(1.08); }
+            100% { box-shadow: 0 0 0 0 rgba(184,134,11,0); transform: scale(1); }
+        }
+
+        .mic-status {
+            margin-top: 1.5rem;
+            font-family: var(--font-mono);
+            font-size: 0.78rem;
+            color: var(--text-muted);
+            letter-spacing: 2px;
+            text-transform: uppercase;
+        }
+
+        /* ── TRANSCRIPT ── */
+        .transcript-box {
+            width: 100%;
+            min-height: 110px;
+            background: var(--bg-panel);
+            border: 1px solid var(--border-subtle);
+            border-radius: 12px;
+            padding: 1.5rem 1.8rem;
+            font-family: var(--font-body);
+            font-size: 1.3rem;
+            color: var(--text-primary);
+            line-height: 1.7;
+            margin-bottom: 2rem;
+            box-shadow: inset 0 2px 12px rgba(0,0,0,0.2);
+            outline: none;
+            transition: border-color 0.3s ease;
+        }
+
+        .transcript-box:focus { border-color: var(--border-gold); }
+
+        .transcript-placeholder {
+            color: var(--text-muted);
+            font-style: italic;
+            text-align: center;
+        }
+
+        /* ── ACTIONS ── */
+        .action-row {
+            display: flex;
+            gap: 1rem;
+            margin-bottom: 2.5rem;
+        }
+
+        .btn {
+            padding: 0.85rem 2.2rem;
+            border-radius: 6px;
+            font-family: var(--font-ui);
+            font-size: 0.85rem;
+            font-weight: 600;
+            cursor: pointer;
+            transition: all 0.3s ease;
+            text-transform: uppercase;
+            letter-spacing: 1px;
+            display: flex;
+            align-items: center;
+            gap: 0.5rem;
+            border: 1px solid transparent;
+        }
+
+        .btn-primary {
+            background: var(--amber);
+            color: var(--bg-deepest);
+        }
+
+        .btn-primary:hover:not(:disabled) {
+            background: var(--amber-light);
+            box-shadow: 0 0 25px rgba(184, 134, 11, 0.3);
+        }
+
+        .btn-primary:disabled {
+            background: rgba(184, 134, 11, 0.25);
+            cursor: not-allowed;
+            color: var(--text-muted);
+        }
+
+        .btn-secondary {
+            background: transparent;
+            color: var(--text-secondary);
+            border-color: var(--border-subtle);
+        }
+
+        .btn-secondary:hover {
+            color: var(--text-primary);
+            border-color: var(--text-secondary);
+        }
+
+        /* ── RESULTS ── */
+        .results-container {
+            width: 100%;
+            display: flex;
+            flex-direction: column;
+            gap: 1.5rem;
+            opacity: 0;
+            transform: translateY(25px);
+            transition: all 0.6s cubic-bezier(0.23, 1, 0.32, 1);
+            pointer-events: none;
+        }
+
+        .results-container.visible {
+            opacity: 1;
+            transform: translateY(0);
+            pointer-events: all;
+        }
+
+        .result-card {
+            background: var(--bg-card);
+            border: 1px solid var(--border-subtle);
+            border-radius: 12px;
+            padding: 2rem 2.2rem;
+            position: relative;
+            overflow: hidden;
+            transition: border-color 0.3s ease;
+        }
+
+        .result-card:hover { border-color: var(--border-gold); }
+
+        .result-card::before {
+            content: '';
+            position: absolute;
+            top: 0; left: 0; right: 0;
+            height: 3px;
+        }
+
+        .rc-advice::before   { background: linear-gradient(90deg, var(--gold-dark), var(--gold)); }
+        .rc-citations::before { background: linear-gradient(90deg, #1a7a4c, #4caf8a); }
+        .rc-suggestions::before { background: linear-gradient(90deg, #8b2035, #c4445a); }
+
+        .result-title {
+            font-family: var(--font-mono);
+            font-size: 0.73rem;
+            letter-spacing: 2.5px;
+            text-transform: uppercase;
+            color: var(--text-muted);
+            margin-bottom: 1.2rem;
+            display: flex;
+            align-items: center;
+            gap: 0.5rem;
+        }
+
+        .result-title i { font-size: 1.05rem; }
+        .rc-advice .result-title i     { color: var(--gold); }
+        .rc-citations .result-title i  { color: #4caf8a; }
+        .rc-suggestions .result-title i { color: #c4445a; }
+
+        .result-content {
+            font-size: 1.05rem;
+            line-height: 1.7;
+            color: var(--text-primary);
+        }
+
+        .citation-list, .suggestion-list {
+            list-style: none; padding: 0; margin: 0;
+        }
+
+        .citation-item, .suggestion-item {
+            padding: 1.1rem 1.2rem;
+            background: rgba(255,255,255,0.015);
+            border: 1px solid var(--border-subtle);
+            border-radius: 8px;
+            margin-bottom: 0.6rem;
+            display: flex;
+            gap: 1rem;
+            align-items: flex-start;
+            transition: background 0.3s ease;
+        }
+
+        .citation-item:hover, .suggestion-item:hover {
+            background: rgba(255,255,255,0.03);
+        }
+
+        .citation-icon, .suggestion-icon {
+            font-size: 1.1rem;
+            padding-top: 0.15rem;
+            flex-shrink: 0;
+        }
+
+        .citation-icon { color: #4caf8a; }
+        .suggestion-icon { color: #c4445a; }
+
+        /* ── LOADER ── */
+        .loader {
+            display: none;
+            align-items: center;
+            justify-content: center;
+            gap: 1rem;
+            color: var(--amber);
+            font-family: var(--font-mono);
+            letter-spacing: 2px;
+            text-transform: uppercase;
+            font-size: 0.8rem;
+            margin-bottom: 2rem;
+            padding: 1.5rem;
+        }
+
+        .loader i { font-size: 1.5rem; }
+
+        /* ── UNSUPPORTED BROWSER ── */
+        .no-speech-support {
+            display: none;
+            color: var(--text-secondary);
+            text-align: center;
+            padding: 2rem;
+            background: rgba(139, 32, 53, 0.08);
+            border: 1px solid rgba(139, 32, 53, 0.2);
+            border-radius: 10px;
+            margin-bottom: 2rem;
+            width: 100%;
+        }
+
+        /* ── FOOTER ── */
+        .footer {
+            background: rgba(10, 10, 15, 0.85);
+            border-top: 1px solid var(--border-subtle);
+            padding: 1rem 2rem;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            gap: 2rem;
+        }
+
+        .footer span {
+            font-family: var(--font-mono);
+            font-size: 0.65rem;
+            color: var(--text-muted);
+            letter-spacing: 1px;
+            text-transform: uppercase;
+        }
+
+        @media (max-width: 768px) {
+            .header { padding: 0 1rem; }
+            .main-container { padding: 2rem 1rem; }
+            .page-title { font-size: 1.8rem; }
+            .mic-btn { width: 100px; height: 100px; font-size: 2.4rem; }
+            .action-row { flex-direction: column; }
+        }
+    </style>
+</head>
+<body>
+
+    <!-- ═══ HEADER ═══ -->
+    <header class="header">
+        <a href="/" class="header-brand">
+            <div class="brand-emblem">🎙️</div>
+            <div class="brand-text">
+                <h1>LexAI Voice</h1>
+                <p>Auditory Legal Intelligence</p>
+            </div>
+        </a>
+        <div class="header-nav">
+            <div class="language-selector">
+                <select id="voicelang">
+                    <option value="english">English (IN)</option>
+                    <option value="hindi">Hindi (हिंदी)</option>
+                    <option value="hinglish">Hinglish</option>
+                </select>
+            </div>
+            <a href="/" class="nav-link"><i class="fas fa-home"></i> Home</a>
+        </div>
+    </header>
+
+    <!-- ═══ MAIN ═══ -->
+    <div class="main-container">
+        <h2 class="page-title">Voice Intake Chamber</h2>
+        <p class="page-subtitle">Describe the legal situation, facts, or queries aloud.<br>Our AI will prescribe strategy, citations, and actionable steps.</p>
+
+        <div id="no-speech" class="no-speech-support">
+            <i class="fas fa-exclamation-triangle" style="color:#c4445a; font-size:2rem; margin-bottom:1rem; display:block;"></i>
+            <p>Your browser does not support the Web Speech API.<br>Please type your query in the text box below instead.</p>
+        </div>
+
+        <div class="mic-container" id="mic-container">
+            <button class="mic-btn" id="mic-btn" onclick="toggleDictation()" title="Tap to speak">
+                <i class="fas fa-microphone"></i>
+            </button>
+            <div class="mic-status" id="mic-status">Tap to speak</div>
+        </div>
+
+        <div class="transcript-box" id="transcript-box" contenteditable="true">
+            <span class="transcript-placeholder">Your spoken words will appear here, or you can type directly…</span>
+        </div>
+
+        <div class="action-row">
+            <button class="btn btn-secondary" onclick="clearTranscript()"><i class="fas fa-eraser"></i> Clear</button>
+            <button class="btn btn-primary" id="analyze-btn" onclick="analyzeVoice()"><i class="fas fa-bolt"></i> Analyze Request</button>
+        </div>
+
+        <div class="loader" id="loader">
+            <i class="fas fa-circle-notch fa-spin"></i> Analyzing Legal Precedents…
+        </div>
+
+        <div class="results-container" id="results-container">
+            <div class="result-card rc-advice">
+                <div class="result-title"><i class="fas fa-balance-scale"></i> Legal Assessment &amp; Advice</div>
+                <div class="result-content" id="res-advice"></div>
+            </div>
+            <div class="result-card rc-suggestions">
+                <div class="result-title"><i class="fas fa-tasks"></i> Recommended Actions</div>
+                <div class="result-content">
+                    <ul class="suggestion-list" id="res-suggestions"></ul>
+                </div>
+            </div>
+            <div class="result-card rc-citations">
+                <div class="result-title"><i class="fas fa-book"></i> Relevant Precedents</div>
+                <div class="result-content">
+                    <ul class="citation-list" id="res-citations"></ul>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- ═══ FOOTER ═══ -->
+    <footer class="footer">
+        <span>Powered by Groq × Llama 3.3 70B</span>
+        <span>•</span>
+        <span>यतो धर्मस्ततो जयः</span>
+    </footer>
+
+    <script>
+        // ─── Language Sync ───
+        const savedLang = localStorage.getItem('lexai_language') || 'english';
+        document.getElementById('voicelang').value = savedLang;
+        document.getElementById('voicelang').addEventListener('change', (e) => {
+            localStorage.setItem('lexai_language', e.target.value);
+        });
+
+        // ─── Speech Recognition ───
+        const SpeechRecognition = window.SpeechRecognition || window.webkitSpeechRecognition;
+        let recognition = null;
+        let isRecording = false;
+        let finalTranscript = '';
+
+        const micBtn = document.getElementById('mic-btn');
+        const micStatus = document.getElementById('mic-status');
+        const transcriptBox = document.getElementById('transcript-box');
+
+        if (SpeechRecognition) {
+            recognition = new SpeechRecognition();
+            recognition.continuous = true;
+            recognition.interimResults = true;
+
+            const updateRecLang = () => {
+                const lang = document.getElementById('voicelang').value;
+                recognition.lang = lang === 'hindi' ? 'hi-IN' : 'en-IN';
+            };
+            updateRecLang();
+            document.getElementById('voicelang').addEventListener('change', updateRecLang);
+
+            recognition.onstart = function() {
+                isRecording = true;
+                micBtn.classList.add('listening');
+                micStatus.textContent = 'Listening… (Tap to stop)';
+                if (transcriptBox.querySelector('.transcript-placeholder')) {
+                    transcriptBox.innerHTML = '';
+                }
+            };
+
+            recognition.onresult = function(event) {
+                let interimTranscript = '';
+                for (let i = event.resultIndex; i < event.results.length; ++i) {
+                    if (event.results[i].isFinal) {
+                        finalTranscript += event.results[i][0].transcript;
+                    } else {
+                        interimTranscript += event.results[i][0].transcript;
+                    }
+                }
+                transcriptBox.innerHTML = finalTranscript + '<i style="color:var(--gold);">' + interimTranscript + '</i>';
+            };
+
+            recognition.onend = function() {
+                isRecording = false;
+                micBtn.classList.remove('listening');
+                micStatus.textContent = 'Tap to speak';
+                transcriptBox.innerHTML = finalTranscript || '<span class="transcript-placeholder">Your spoken words will appear here, or you can type directly…</span>';
+            };
+
+            recognition.onerror = function(event) {
+                console.error('Speech error:', event.error);
+                isRecording = false;
+                micBtn.classList.remove('listening');
+                micStatus.textContent = 'Error: ' + event.error;
+            };
+        } else {
+            document.getElementById('mic-container').style.display = 'none';
+            document.getElementById('no-speech').style.display = 'block';
+        }
+
+        function toggleDictation() {
+            if (!recognition) return;
+            if (isRecording) {
+                recognition.stop();
+            } else {
+                const currentText = transcriptBox.innerText;
+                finalTranscript = (currentText === 'Your spoken words will appear here, or you can type directly…') ? '' : currentText;
+                recognition.start();
+            }
+        }
+
+        function clearTranscript() {
+            transcriptBox.innerHTML = '<span class="transcript-placeholder">Your spoken words will appear here, or you can type directly…</span>';
+            finalTranscript = '';
+            document.getElementById('results-container').classList.remove('visible');
+        }
+
+        transcriptBox.addEventListener('focus', function() {
+            if (this.querySelector('.transcript-placeholder')) {
+                this.innerHTML = '';
+            }
+        });
+
+        // ─── Analyze ───
+        async function analyzeVoice() {
+            let text = transcriptBox.innerText.trim();
+            if (!text || text === 'Your spoken words will appear here, or you can type directly…') {
+                alert('Please dictate or type a query first.');
+                return;
+            }
+
+            if (isRecording && recognition) recognition.stop();
+
+            document.getElementById('analyze-btn').disabled = true;
+            document.getElementById('loader').style.display = 'flex';
+            document.getElementById('results-container').classList.remove('visible');
+
+            try {
+                const API_BASE = window.location.origin;
+                const response = await fetch(`${API_BASE}/voice-analyze`, {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ transcript: text })
+                });
+
+                if (!response.ok) throw new Error('API Error: ' + response.status);
+                const data = await response.json();
+
+                // Advice
+                document.getElementById('res-advice').innerHTML = `<p>${data.advice || 'No advice returned.'}</p>`;
+
+                // Suggestions
+                const suggEl = document.getElementById('res-suggestions');
+                suggEl.innerHTML = '';
+                (data.legal_suggestions || []).forEach(s => {
+                    suggEl.innerHTML += `<li class="suggestion-item"><span class="suggestion-icon"><i class="fas fa-arrow-right"></i></span><span>${s}</span></li>`;
+                });
+                if (!data.legal_suggestions || data.legal_suggestions.length === 0) {
+                    suggEl.innerHTML = '<li class="suggestion-item"><span class="suggestion-icon"><i class="fas fa-minus"></i></span><span>No specific action steps suggested.</span></li>';
+                }
+
+                // Citations
+                const citEl = document.getElementById('res-citations');
+                citEl.innerHTML = '';
+                (data.citations || []).forEach(c => {
+                    citEl.innerHTML += `<li class="citation-item"><span class="citation-icon"><i class="fas fa-gavel"></i></span><span>${c}</span></li>`;
+                });
+                if (!data.citations || data.citations.length === 0) {
+                    citEl.innerHTML = '<li class="citation-item"><span class="citation-icon"><i class="fas fa-minus"></i></span><span>No specific precedents identified for this query.</span></li>';
+                }
+
+                document.getElementById('results-container').classList.add('visible');
+            } catch (err) {
+                console.error(err);
+                alert('An error occurred while analyzing. Please check the console.');
+            } finally {
+                document.getElementById('analyze-btn').disabled = false;
+                document.getElementById('loader').style.display = 'none';
+            }
+        }
+    </script>
+</body>
+</html>

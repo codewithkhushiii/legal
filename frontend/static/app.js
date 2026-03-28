@@ -179,6 +179,7 @@ async function runAudit() {
     try {
         const formData = new FormData();
         formData.append('file', selectedFile);
+        formData.append('language', localStorage.getItem('lexai_language') || 'english');
 
         activateStep(2);
         const res = await fetch(`${API_BASE}/audit-document`, {
@@ -537,7 +538,7 @@ async function runManualSearch() {
         const res = await fetch(`${API_BASE}/verify-citation`, {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ citation })
+            body: JSON.stringify({ citation, language: localStorage.getItem('lexai_language') || 'english' })
         });
 
         const data = await res.json();
@@ -634,6 +635,7 @@ async function runBulkAudit() {
     try {
         const formData = new FormData();
         bulkFiles.forEach(f => formData.append('files', f));
+        formData.append('language', localStorage.getItem('lexai_language') || 'english');
 
         fill.style.width = '30%';
         text.textContent = 'Processing citations...';
@@ -716,7 +718,8 @@ async function generateSummary() {
                 results: auditData.results || [],
                 total: auditData.total_citations_found || 0,
                 sc_count: auditData.supreme_court_count || 0,
-                hc_count: auditData.high_court_count || 0
+                hc_count: auditData.high_court_count || 0,
+                language: localStorage.getItem('lexai_language') || 'english'
             })
         });
 
@@ -973,7 +976,8 @@ async function sendChatMessage() {
             body: JSON.stringify({
                 message,
                 history: chatHistory,
-                audit_context: auditContext
+                audit_context: auditContext,
+                language: localStorage.getItem('lexai_language') || 'english'
             })
         });
 

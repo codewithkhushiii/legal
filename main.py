@@ -9,7 +9,7 @@ import numpy as np
 import PyPDF2
 from pathlib import Path
 from contextlib import asynccontextmanager
-from fastapi import FastAPI, UploadFile, File, HTTPException
+from fastapi import FastAPI, UploadFile, File, HTTPException, Form
 from fastapi.responses import JSONResponse
 from pydantic import BaseModel
 from typing import List, Optional
@@ -161,19 +161,25 @@ app.mount("/static", StaticFiles(directory="frontend/static"), name="static")
 # ==========================================
 # 3. Pydantic Models
 # ==========================================
+class VoiceAnalyzeRequest(BaseModel):
+    transcript: str
+
 class ChatMessage(BaseModel):
     message: str
     history: Optional[List[dict]] = []
     audit_context: Optional[str] = None
+    language: Optional[str] = "english"
 
 class CitationRequest(BaseModel):
     citation: str
+    language: Optional[str] = "english"
 
 class SummaryRequest(BaseModel):
     results: list
     total: int
     sc_count: int
     hc_count: int
+    language: Optional[str] = "english"
     
 @app.get("/", response_class=FileResponse)
 async def serve_homepage():
@@ -194,7 +200,7 @@ async def serve_bail_reckoner():
 def api_health():
     return {
         "message": "Legal AI Platform API is running!",
-        "endpoints": ["/audit-document", "/audit-multiple", "/verify-citation", "/chat", "/summarize", "/reckoner/bail", "/db-stats"],
+        "endpoints": ["/audit-document", "/audit-multiple", "/verify-citation", "/chat", "/summarize", "/reckoner/bail", "/db-stats", "/voice-analyze"],
         "docs": "/docs"
     }
 
@@ -286,6 +292,23 @@ def _read_pdf(filepath: Path) -> str:
         logger.error(f"⚠️ Error reading PDF {filepath}: {e}")
         return ""
 
+
+
+# ==========================================
+# 5. Language Support Helper
+# ==========================================
+def get_language_prompt_suffix(language: str = "english") -> str:
+    """Returns language-specific instructions for the LLM."""
+    language_instructions = {
+        "english": "Respond in English. Be professional and precise.",
+        "hindi": "Respond in Hindi (Devanagari script). Use formal legal terminology.",
+        "hinglish": "Respond in Hinglish (Hindi words in Roman script mixed with English). Keep it professional."
+    }
+    return language_instructions.get(language.lower(), language_instructions["english"])
+
+# ==========================================
+# 6. Core Audit Functions with Language Support
+# ==========================================
 
 @app.post("/reckoner/bail")
 async def calculate_bail_eligibility(req: ReckonerRequest):
@@ -419,7 +442,7 @@ def extract_text_from_pdf_path(db_path_value: str) -> str:
     return ""
 
 
-def verify_quotation(attributed_claim: str, source_file_path: str):
+def verify_quotation(attributed_claim: str, source_file_path: str, language: str = "english"):
     """
     The RAG Engine: Finds the relevant context in the judgment and uses LLM to verify.
     
@@ -496,6 +519,8 @@ def verify_quotation(attributed_claim: str, source_file_path: str):
     # ─────────────────────────────────────────────
     # STEP 4: Improved LLM verification prompt
     # ─────────────────────────────────────────────
+    lang_suffix = get_language_prompt_suffix(language)
+    
     verification_prompt = f"""You are a SENIOR legal analyst verifying whether a claim attributed to a court judgment is accurate.
 
 CRITICAL LEGAL CONTEXT:
@@ -524,6 +549,8 @@ Consider these possibilities:
 - CONTRADICTED: The court explicitly held the OPPOSITE of what is claimed  
 - UNSUPPORTED: The judgment discusses related topics but doesn't clearly establish the claimed principle
 - PARTIALLY_SUPPORTED: The claim captures the general spirit but oversimplifies or slightly misrepresents the holding
+
+{lang_suffix}
 
 Respond ONLY in JSON format:
 {{"verdict": "SUPPORTED" | "CONTRADICTED" | "UNSUPPORTED" | "PARTIALLY_SUPPORTED", "explanation": "2-3 sentence reasoning explaining which part of the judgment you relied on and whether it represents the court's own view or a party's argument"}}
@@ -565,11 +592,12 @@ Respond ONLY in JSON format:
         return {"status": "⚠️ ERROR", "reason": f"LLM Error: {str(e)}"}
 
 
-def extract_citations_with_groq(full_text):
+def extract_citations_with_groq(full_text, language: str = "english"):
     print("🧠 Splitting document into manageable chunks...")
     chunks = chunk_text(full_text)
     
     all_extracted_cases = {}
+    lang_suffix = get_language_prompt_suffix(language)
 
     for i, chunk in enumerate(chunks):
         prompt = f"""
@@ -583,6 +611,8 @@ def extract_citations_with_groq(full_text):
         
         ALSO, extract the exact claim, reasoning, or principle attributed to this case by the author.
         Be precise: extract what the AUTHOR SAYS the court held, not background facts.
+        
+        {lang_suffix}
         
         Respond ONLY with a valid JSON object in this exact format:
         {{
@@ -680,7 +710,7 @@ def get_broad_candidates(case_name, max_results=15):
     return matches.head(max_results)
 
 
-def resolve_match_with_llm(target_citation, candidates_df):
+def resolve_match_with_llm(target_citation, candidates_df, language: str = "english"):
     if candidates_df.empty:
         return {"status": "🔴 NO CANDIDATES", "message": "No similar cases found in database.", "confidence": 0}
 
@@ -688,6 +718,8 @@ def resolve_match_with_llm(target_citation, candidates_df):
         str(row['index']): f"{row.get('title', 'Unknown')} (NC: {row.get('nc_display', 'N/A')}, Citation: {row.get('citation', 'N/A')})"
         for _, row in candidates_df.iterrows()
     }
+
+    lang_suffix = get_language_prompt_suffix(language)
 
     prompt = f"""
     You are a STRICT legal AI auditor. Verify if a Target Citation exists in the Database Candidates.
@@ -699,6 +731,9 @@ def resolve_match_with_llm(target_citation, candidates_df):
     2. If the neutral citation (NC) matches (e.g. 2024 INSC 2), it is an EXACT match.
     3. If party names match on both sides (petitioner vs respondent), it is an EXACT match.
     If there is an EXACT match, return its ID. If NO EXACT MATCH, return "null".
+    
+    {lang_suffix}
+    
     Respond ONLY with JSON: {{"matched_id": "id_or_null", "reason": "Short reason", "confidence": 85}}
     """
     try:
@@ -750,14 +785,6 @@ def resolve_match_with_llm(target_citation, candidates_df):
 # 5. API Endpoints
 # ==========================================
 
-@app.get("/")
-def read_root():
-    return {
-        "message": "Legal Citation Auditor API is running!",
-        "endpoints": ["/audit-document", "/audit-multiple", "/verify-citation", "/chat", "/summarize", "/db-stats"],
-        "docs": "/docs"
-    }
-
 @app.get("/db-stats")
 def get_db_stats():
     if df.empty:
@@ -775,7 +802,7 @@ def get_db_stats():
     }
 
 @app.post("/audit-document")
-async def audit_document(file: UploadFile = File(...)):
+async def audit_document(file: UploadFile = File(...), language: str = Form("english")):
     if not file.filename.endswith('.pdf'):
         raise HTTPException(status_code=400, detail="File must be a PDF")
 
@@ -789,7 +816,7 @@ async def audit_document(file: UploadFile = File(...)):
     if not document_text.strip():
         raise HTTPException(status_code=400, detail="Could not extract text from PDF.")
 
-    extracted_data = extract_citations_with_groq(document_text)
+    extracted_data = extract_citations_with_groq(document_text, language)
     sc_citations = extracted_data["sc_cases"]
     hc_citations = extracted_data["hc_cases"]
     case_details = extracted_data["details"]
@@ -801,7 +828,7 @@ async def audit_document(file: UploadFile = File(...)):
 
     for citation in sc_citations:
         candidates = get_broad_candidates(citation)
-        verification_result = resolve_match_with_llm(citation, candidates)
+        verification_result = resolve_match_with_llm(citation, candidates, language)
         
         quote_verification = {}
         claim = case_details.get(citation, {}).get("attributed_claim", "")
@@ -811,7 +838,7 @@ async def audit_document(file: UploadFile = File(...)):
             if not source_file_path or source_file_path.strip() == "":
                 quote_verification = {"status": "⚠️ SKIPPED", "reason": "No PDF path available in database for this case."}
             else:
-                quote_verification = verify_quotation(claim, source_file_path)
+                quote_verification = verify_quotation(claim, source_file_path, language)
         else:
             quote_verification = {"status": "⚠️ SKIPPED", "reason": "Case was not verified, skipping quote check."}
 
@@ -825,7 +852,7 @@ async def audit_document(file: UploadFile = File(...)):
     for citation in hc_citations:
         candidates = get_broad_candidates(citation)
         if not candidates.empty:
-            verification_result = resolve_match_with_llm(citation, candidates)
+            verification_result = resolve_match_with_llm(citation, candidates, language)
             verification_result["status"] = "⚠️ HC-" + verification_result["status"].replace("🟢 ", "").replace("🔴 ", "")
         else:
             verification_result = {
@@ -846,11 +873,12 @@ async def audit_document(file: UploadFile = File(...)):
         "total_citations_found": len(sc_citations) + len(hc_citations),
         "supreme_court_count": len(sc_citations),
         "high_court_count": len(hc_citations),
-        "results": final_report
+        "results": final_report,
+        "language": language
     })
 
 @app.post("/audit-multiple")
-async def audit_multiple(files: List[UploadFile] = File(...)):
+async def audit_multiple(files: List[UploadFile] = File(...), language: str = Form("english")):
     all_results = []
     total_sc = 0
     total_hc = 0
@@ -872,7 +900,7 @@ async def audit_multiple(files: List[UploadFile] = File(...)):
             all_results.append({"filename": file.filename, "error": "Could not extract text from PDF", "results": []})
             continue
 
-        extracted_data = extract_citations_with_groq(document_text)
+        extracted_data = extract_citations_with_groq(document_text, language)
         sc_citations = extracted_data["sc_cases"]
         hc_citations = extracted_data["hc_cases"]
         case_details = extracted_data["details"]
@@ -882,7 +910,7 @@ async def audit_multiple(files: List[UploadFile] = File(...)):
         file_report = []
         for citation in sc_citations:
             candidates = get_broad_candidates(citation)
-            verification_result = resolve_match_with_llm(citation, candidates)
+            verification_result = resolve_match_with_llm(citation, candidates, language)
             
             quote_verification = {}
             claim = case_details.get(citation, {}).get("attributed_claim", "")
@@ -890,7 +918,7 @@ async def audit_multiple(files: List[UploadFile] = File(...)):
             if "🟢" in verification_result.get("status", ""):
                 source_file_path = verification_result.get("file_to_open", "")
                 if source_file_path and source_file_path.strip():
-                    quote_verification = verify_quotation(claim, source_file_path)
+                    quote_verification = verify_quotation(claim, source_file_path, language)
                 else:
                     quote_verification = {"status": "⚠️ SKIPPED", "reason": "No PDF path available."}
             else:
@@ -928,7 +956,8 @@ async def audit_multiple(files: List[UploadFile] = File(...)):
         "total_hc_citations": total_hc,
         "total_verified": verified,
         "total_fabricated": fabricated,
-        "documents": all_results
+        "documents": all_results,
+        "language": language
     })
 
 @app.post("/verify-citation")
@@ -938,7 +967,7 @@ async def verify_single_citation(req: CitationRequest):
         raise HTTPException(status_code=400, detail="Citation text cannot be empty.")
 
     candidates = get_broad_candidates(citation)
-    result = resolve_match_with_llm(citation, candidates)
+    result = resolve_match_with_llm(citation, candidates, req.language)
 
     hc_keywords = ['high court', ' hc ', 'del hc', 'bom hc', 'mad hc', 'cal hc']
     court_type = "High Court" if any(k in citation.lower() for k in hc_keywords) else "Supreme Court / Unknown"
@@ -946,12 +975,15 @@ async def verify_single_citation(req: CitationRequest):
     return JSONResponse({
         "target_citation": citation,
         "court_type": court_type,
-        "verification": result
+        "verification": result,
+        "language": req.language
     })
 
 @app.post("/chat")
 async def legal_chat(payload: ChatMessage):
-    system_prompt = """You are LexAI, an expert AI legal assistant specializing in Indian law, particularly Supreme Court and High Court jurisprudence.
+    lang_suffix = get_language_prompt_suffix(payload.language)
+    
+    system_prompt = f"""You are LexAI, an expert AI legal assistant specializing in Indian law, particularly Supreme Court and High Court jurisprudence.
 
 You help lawyers, legal researchers, and students by:
 - Explaining legal concepts, sections, and acts
@@ -962,7 +994,9 @@ You help lawyers, legal researchers, and students by:
 
 Always be precise, cite relevant law where possible, and note when you are uncertain.
 If the user shares audit results, use them as context to give tailored advice.
-Keep responses concise but thorough. Format with bullet points when listing items."""
+Keep responses concise but thorough. Format with bullet points when listing items.
+
+{lang_suffix}"""
 
     messages = [{"role": "system", "content": system_prompt}]
 
@@ -995,6 +1029,7 @@ async def generate_summary(req: SummaryRequest):
     unverified = [r for r in req.results if r not in verified and r not in fabricated and r not in skipped]
 
     fabricated_names = [r.get("target_citation", "Unknown") for r in fabricated[:5]]
+    lang_suffix = get_language_prompt_suffix(req.language)
 
     prompt = f"""You are a senior legal analyst generating an audit report summary.
 
@@ -1013,7 +1048,9 @@ Write a concise 3-4 paragraph professional legal audit summary in plain English.
 2. Key findings (which citations were problematic)
 3. Risk level (Low/Medium/High) and recommendation for the lawyer
 
-Be direct and professional. Do not use markdown headers."""
+Be direct and professional. Do not use markdown headers.
+
+{lang_suffix}"""
 
     try:
         response = client.chat.completions.create(
@@ -1034,13 +1071,75 @@ Be direct and professional. Do not use markdown headers."""
                 "fabricated": len(fabricated),
                 "skipped": len(skipped),
                 "unverified": len(unverified)
-            }
+            },
+            "language": req.language
         })
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"LLM Error: {str(e)}")
     
+
+@app.post("/voice-analyze")
+async def voice_analyze(req: VoiceAnalyzeRequest):
+    """
+    Takes a transcribed legal query and returns structured:
+    - advice (text)
+    - citations (list of case names)
+    - legal_suggestions (list of action items)
+    """
+    if not req.transcript or not req.transcript.strip():
+        raise HTTPException(status_code=400, detail="Transcript cannot be empty.")
+
+    prompt = f"""You are LexAI, an expert AI legal assistant specializing in Indian law (Supreme Court, High Court, IPC, CrPC, Constitution).
+
+A user has spoken the following legal query:
+"{req.transcript}"
+
+Analyze this query and respond ONLY with valid JSON in this exact format:
+{{
+  "advice": "A clear, concise 3-5 sentence legal advice paragraph addressing the user's situation under Indian law. Be specific and actionable.",
+  "citations": [
+    "Case Name 1 v. Respondent (Year) — one-line relevance",
+    "Case Name 2 v. Respondent (Year) — one-line relevance",
+    "Case Name 3 v. Respondent (Year) — one-line relevance"
+  ],
+  "legal_suggestions": [
+    "Actionable suggestion 1",
+    "Actionable suggestion 2",
+    "Actionable suggestion 3",
+    "Actionable suggestion 4"
+  ]
+}}
+
+Rules:
+- citations: provide 2-4 real, relevant Indian Supreme Court or High Court cases. If none are clearly relevant, return an empty array.
+- legal_suggestions: provide 3-5 clear, numbered action steps the person should take.
+- Keep advice professional, clear, and grounded in Indian law.
+- Respond ONLY with the JSON. No extra text."""
+
+    try:
+        response = client.chat.completions.create(
+            model="llama-3.3-70b-versatile",
+            messages=[
+                {"role": "system", "content": "You are LexAI, a senior Indian legal analyst. Output only valid JSON."},
+                {"role": "user", "content": prompt}
+            ],
+            response_format={"type": "json_object"},
+            temperature=0.3,
+            max_tokens=1200
+        )
+        result = json.loads(response.choices[0].message.content)
+        return JSONResponse({
+            "advice": result.get("advice", ""),
+            "citations": result.get("citations", []),
+            "legal_suggestions": result.get("legal_suggestions", [])
+        })
+    except Exception as e:
+        logger.error(f"❌ Voice analysis error: {e}")
+        raise HTTPException(status_code=500, detail=f"Analysis error: {str(e)}")
+
 # ==========================================
 # Case Research Endpoints
+
 # ==========================================
 
 @app.get("/case-research", response_class=FileResponse)
@@ -1442,4 +1541,4 @@ Be thorough, strategic, and practical. This should serve as an actionable litiga
         raise HTTPException(
             status_code=500,
             detail=f"Strategy generation error: {str(e)}"
-        )
+        )
